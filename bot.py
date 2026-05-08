@@ -225,7 +225,7 @@ def main():
     init_db()
 
     import json, os
-    targets_path = "config/targets.json"
+    targets_path = "targets.json"
     if os.path.exists(targets_path):
         with open(targets_path) as f:
             targets = json.load(f)
