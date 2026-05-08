@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 ANTHROPIC_API_KEY   = os.environ.get("ANTHROPIC_API_KEY", "")
 RELEVANCE_THRESHOLD = float(os.environ.get("RELEVANCE_THRESHOLD", "0.3"))
 ENRICH_BATCH_SIZE   = int(os.environ.get("ENRICH_BATCH_SIZE", "20"))
-MODEL               = "claude-haiku-4-5"  # Fast + cheap for bulk enrichment
+MODEL               = "claude-haiku-4-5-20251001"  # Fast + cheap for bulk enrichment
 
 
 # ─── Author registry ─────────────────────────────────────────────────────────
