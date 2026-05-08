@@ -18,7 +18,7 @@ from telegram.ext import (
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from database import init_db, get_stats, search_entries, get_recent_kept
-from scraper_twitter import scrape_accounts, scrape_keywords, load_targets
+from scraper_twitter import scrape_accounts, load_targets
 from enrichment import run_enrichment_batch, estimate_cost, load_author_registry
 from digest import generate_daily_digest
 
@@ -55,11 +55,6 @@ async def job_scrape_twitter_accounts():
     result = await scrape_accounts(max_per_account=200)
     logger.info(f"   → new={result['new']} skipped={result['skipped']}")
 
-async def job_scrape_twitter_keywords():
-    logger.info("⏰ Scheduled: scrape Twitter keywords (last 24h)")
-    result = await scrape_keywords(max_per_keyword=200)
-    logger.info(f"   → new={result['new']} skipped={result['skipped']}")
-
 async def job_enrich():
     logger.info("⏰ Scheduled: enrich pending entries")
     stats = await run_enrichment_batch(batch_size=100)
@@ -92,15 +87,12 @@ async def cmd_scrape(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """Manually trigger a full scrape cycle."""
     if not is_contributor(update):
         return await update.message.reply_text("⛔ Contributors only.")
-    msg = await update.message.reply_text("🔄 Scraping Twitter (accounts + keywords)…")
+    msg = await update.message.reply_text("🔄 Scraping Twitter accounts…")
     tw_acc = await scrape_accounts(max_per_account=200)
-    tw_kw  = await scrape_keywords(max_per_keyword=200)
-    total_new = tw_acc["new"] + tw_kw["new"]
     await msg.edit_text(
         f"✅ Scrape done.\n"
         f"• Accounts: +{tw_acc['new']} new\n"
-        f"• Keywords: +{tw_kw['new']} new\n"
-        f"Total: {total_new} new entries\n\n"
+        f"• Skipped (dedup): {tw_acc['skipped']}\n\n"
         f"Run /enrich to process them."
     )
 
@@ -261,8 +253,6 @@ def main():
 
     # 08:00 — scrape les tweets des dernières 24h (comptes)
     scheduler.add_job(job_scrape_twitter_accounts, "cron", hour=8, minute=0)
-    # 08:05 — scrape les tweets des dernières 24h (keywords)
-    scheduler.add_job(job_scrape_twitter_keywords, "cron", hour=8, minute=5)
     # 08:30 — enrichissement IA de tous les tweets scrappés
     scheduler.add_job(job_enrich, "cron", hour=8, minute=30)
     # 09:00 — digest envoyé à Andreas (après enrichissement)
