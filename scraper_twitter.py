@@ -1,6 +1,7 @@
 """
 Twitter scraper via GetXAPI — comptes uniquement.
 Récupère uniquement les tweets des dernières 24h via l'opérateur since:.
+Exclut les retweets et les réponses.
 Dédup automatique par source_url dans la DB.
 """
 
@@ -62,8 +63,8 @@ async def fetch_user_tweets(
     max_results: int = 50,
 ) -> AsyncGenerator[dict, None]:
     """
-    Récupère les tweets des dernières 24h d'un compte via advanced_search.
-    Utilise l'opérateur since: pour filtrer côté GetXAPI.
+    Récupère les tweets originaux des dernières 24h d'un compte via advanced_search.
+    Exclut les retweets (-is:retweet) et les réponses (-is:reply) côté serveur.
     """
     since = _since_date()
     cursor = None
@@ -71,7 +72,7 @@ async def fetch_user_tweets(
 
     while fetched < max_results:
         params = {
-            "q": f"from:{handle} since:{since}",
+            "q": f"from:{handle} since:{since} -is:retweet -is:reply",
             "product": "Latest",
         }
         if cursor:
@@ -126,7 +127,7 @@ def _normalise_tweet(raw: dict, author: str) -> dict:
 async def scrape_accounts(max_per_account: int = 50) -> dict:
     """
     Scrape tous les comptes de WATCH_ACCOUNTS.
-    Récupère uniquement les tweets des dernières 24h via since:.
+    Récupère uniquement les tweets originaux des dernières 24h via since:.
     Retourne {new, skipped, errors}.
     """
     if not WATCH_ACCOUNTS:
