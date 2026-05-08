@@ -223,3 +223,12 @@ def log_scrape_finish(run_id: int, new_entries: int, errors: list[str]):
             "UPDATE scrape_runs SET finished_at=?, new_entries=?, errors=? WHERE id=?",
             (now, new_entries, json.dumps(errors), run_id),
         )
+
+def get_all_entries(limit: int = 2000) -> list[dict]:
+    """All entries ordered by ingested_at desc — for CSV export."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM entries ORDER BY ingested_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    return [dict(r) for r in rows]
