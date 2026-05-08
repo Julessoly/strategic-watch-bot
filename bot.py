@@ -17,7 +17,7 @@ from telegram.ext import (
 )
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from database import init_db, get_stats, search_entries, get_recent_kept
+from database import init_db, get_stats, search_entries, get_recent_kept, get_all_entries
 from scraper_twitter import scrape_accounts, load_targets
 from enrichment import run_enrichment_batch, estimate_cost, load_author_registry
 from digest import generate_daily_digest
@@ -78,13 +78,12 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     role = "contributor" if is_contributor(update) else "reader"
     await update.message.reply_text(
         f"👋 Strategic Watch Bot — you're logged in as *{role}*.\n\n"
-        f"{'Use /scrape, /enrich, /stats to manage the pipeline.' if role == 'contributor' else ''}\n"
+        f"{'Use /scrape, /enrich, /stats, /export to manage the pipeline.' if role == 'contributor' else ''}\n"
         f"Use /ask <question>, /digest, /recent, /stats to query the knowledge base.",
         parse_mode="Markdown"
     )
 
 async def cmd_scrape(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """Manually trigger a full scrape cycle."""
     if not is_contributor(update):
         return await update.message.reply_text("⛔ Contributors only.")
     msg = await update.message.reply_text("🔄 Scraping Twitter accounts…")
@@ -97,7 +96,6 @@ async def cmd_scrape(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     )
 
 async def cmd_enrich(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """Manually trigger AI enrichment on pending entries."""
     if not is_contributor(update):
         return await update.message.reply_text("⛔ Contributors only.")
     stats = get_stats()
@@ -145,7 +143,6 @@ async def cmd_digest(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await msg.edit_text(text, parse_mode="Markdown")
 
 async def cmd_recent(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """Show the 5 most recent kept entries."""
     if not is_allowed(update):
         return
     import json
@@ -157,20 +154,18 @@ async def cmd_recent(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         tags = json.loads(e["tags"]) if e.get("tags") else []
         tag_str = " ".join(f"#{t}" for t in tags[:3])
         score = f"{e['relevance_score']:.2f}" if e.get("relevance_score") else "?"
-        summary = e.get("summary") or e.get("content", "")[:120]
+        summary = (e.get("summary") or e.get("content", "")[:120]).replace("*", "").replace("_", "").replace("`", "")
         lines.append(
             f"[{e['source_type']} | @{e['author']} | {score}] {tag_str}\n"
             f"{summary}\n"
-            f"→ {e['source_url']}"
+            f"{e['source_url']}"
         )
     await update.message.reply_text(
-        "🕐 *Recent entries*\n\n" + "\n\n".join(lines),
-        parse_mode="Markdown",
+        "🕐 Recent entries\n\n" + "\n\n".join(lines),
         disable_web_page_preview=True
     )
 
 async def cmd_ask(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """Free-form question answered from the knowledge base."""
     if not is_allowed(update):
         return
     question = " ".join(ctx.args).strip() if ctx.args else ""
@@ -178,7 +173,6 @@ async def cmd_ask(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text("Usage: /ask <your question>")
 
     msg = await update.message.reply_text("🔍 Searching…")
-
     keywords = " OR ".join(question.split()[:4])
     results = search_entries(keywords, limit=15)
 
@@ -198,24 +192,66 @@ async def cmd_ask(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         model="claude-sonnet-4-20250514",
         max_tokens=800,
         system="You are a strategic analyst for Blockchain.com. Answer questions using only the provided knowledge base entries. Be direct and cite sources with @author and URL. If the information isn't there, say so.",
-        messages=[{
-            "role": "user",
-            "content": f"Knowledge base:\n\n{context}\n\n---\n\nQuestion: {question}"
-        }]
+        messages=[{"role": "user", "content": f"Knowledge base:\n\n{context}\n\n---\n\nQuestion: {question}"}]
     )
     await msg.edit_text(response.content[0].text.strip(), parse_mode="Markdown", disable_web_page_preview=True)
+
+
+async def cmd_export(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Export DB as CSV and send to user."""
+    if not is_contributor(update):
+        return await update.message.reply_text("⛔ Contributors only.")
+
+    import csv
+    import io
+
+    msg = await update.message.reply_text("⏳ Generating export…")
+    entries = get_all_entries(limit=2000)
+
+    if not entries:
+        return await msg.edit_text("📭 No entries in DB.")
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["id", "author", "published_at", "relevance_score", "kept", "tags", "summary", "content", "source_url"])
+    for e in entries:
+        import json as _json
+        tags = e.get("tags") or "[]"
+        try:
+            tags = ", ".join(_json.loads(tags))
+        except Exception:
+            pass
+        writer.writerow([
+            e.get("id"),
+            e.get("author"),
+            e.get("published_at"),
+            e.get("relevance_score"),
+            e.get("kept"),
+            tags,
+            e.get("summary", ""),
+            (e.get("content") or "")[:200],
+            e.get("source_url"),
+        ])
+
+    output.seek(0)
+    await update.message.reply_document(
+        document=output.read().encode("utf-8"),
+        filename="watch_db_export.csv",
+        caption=f"📊 {len(entries)} entries exported"
+    )
+    await msg.delete()
 
 
 # ─── App setup ────────────────────────────────────────────────────────────────
 
 async def post_init(app: Application):
-    """Set bot commands visible in Telegram UI."""
     await app.bot.set_my_commands([
         BotCommand("start",   "Introduction"),
         BotCommand("digest",  "Daily digest (last 24h)"),
         BotCommand("ask",     "Ask a question from the knowledge base"),
         BotCommand("recent",  "5 most recent relevant entries"),
         BotCommand("stats",   "Database stats + cost"),
+        BotCommand("export",  "[Contributors] Export DB as CSV"),
         BotCommand("scrape",  "[Contributors] Trigger manual scrape"),
         BotCommand("enrich",  "[Contributors] Trigger AI enrichment"),
     ])
@@ -239,7 +275,6 @@ def main():
         .build()
     )
 
-    # Register handlers
     app.add_handler(CommandHandler("start",   cmd_start))
     app.add_handler(CommandHandler("scrape",  cmd_scrape))
     app.add_handler(CommandHandler("enrich",  cmd_enrich))
@@ -247,23 +282,12 @@ def main():
     app.add_handler(CommandHandler("digest",  cmd_digest))
     app.add_handler(CommandHandler("recent",  cmd_recent))
     app.add_handler(CommandHandler("ask",     cmd_ask))
+    app.add_handler(CommandHandler("export",  cmd_export))
 
-    # ─── Scheduler : tout se passe à 8h UTC ───────────────────────────────────
     scheduler = AsyncIOScheduler()
-
-    # 08:00 — scrape les tweets des dernières 24h (comptes)
     scheduler.add_job(job_scrape_twitter_accounts, "cron", hour=8, minute=0)
-    # 08:30 — enrichissement IA de tous les tweets scrappés
     scheduler.add_job(job_enrich, "cron", hour=8, minute=30)
-    # 09:00 — digest envoyé à Andreas (après enrichissement)
-    scheduler.add_job(
-        job_daily_digest,
-        "cron",
-        hour=9,
-        minute=0,
-        args=[app],
-    )
-
+    scheduler.add_job(job_daily_digest, "cron", hour=9, minute=0, args=[app])
     scheduler.start()
 
     logger.info("🚀 Strategic Watch Bot started — scrape quotidien à 8h UTC")
