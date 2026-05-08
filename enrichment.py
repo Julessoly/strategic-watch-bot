@@ -64,17 +64,21 @@ CORE PRODUCTS & BUSINESS LINES:
    - Staking on supported PoS chains
    - Block explorer (original product since 2011)
 
-2. INSTITUTIONAL SERVICES (Radial platform)
+2. INSTITUTIONAL SERVICES
    - 24/7 OTC trading desk (spot + options, block trades, minimal slippage)
-   - Prime brokerage & custody (institutional-grade, military-grade security)
+   - Prime brokerage & custody (institutional-grade security)
    - Lending, borrowing, yield generation
    - Treasury management for token foundations, family offices, hedge funds
    - Token launch & listing services (liquidity provision for new tokens)
    - Co-marketing & retail distribution for crypto projects
 
-3. STRATEGIC PRIORITIES IN 2026
-   - Prediction markets (TOP PRIORITY — Blockchain.com acquired The Clearing Company, a regulated prediction markets firm)
-   - AI x crypto: agentic payments, AI agents executing crypto transactions, AI wallet features ("June" AI CFO vision)
+3. INNOVATION PRODUCTS (launched 2025-2026)
+   - June (askjune.ai): privacy-first AI assistant launched Aug 2025. 500K+ accounts, 650K weekly interactions. No conversation storage, no training on user data. Supports GPT-5, Claude, Gemini, DeepSeek. June Pro payable in crypto. Being integrated into the Blockchain.com wallet as an AI financial advisor.
+   - SnapMarkets (snapmarkets.com): prediction market platform launched May 6 2026. 30-second BTC price prediction rounds starting at $1. Incubated by Blockchain.com, deployed on Arbitrum. Not available in US/UK yet. Direct competitors: Kalshi, Polymarket, Robinhood Predictions, Crypto.com OG.
+
+4. STRATEGIC PRIORITIES IN 2026
+   - June AI: grow user base, wallet integration, AI agent payments
+   - SnapMarkets: expand to new assets beyond BTC, navigate US/UK regulatory path
    - Stablecoins & payments infrastructure
    - RWA (Real World Assets) tokenization
    - Regulatory compliance as competitive advantage (MiCA, FCA, SEC, CLARITY Act)
@@ -133,6 +137,9 @@ IMPORTANT SCORING RULES:
 - A prediction markets regulatory development (Kalshi, CFTC): 0.85+
 - An AI agent executing crypto payments news: 0.80+
 - A Polymarket or Kalshi new product launch: 0.80+
+- Any news about June (askjune.ai) competitors (privacy AI, crypto AI assistants): 0.75+
+- Any news about SnapMarkets competitors (Robinhood Predictions, Crypto.com OG, Polymarket): 0.80+
+- Arbitrum ecosystem news (SnapMarkets runs on Arbitrum): 0.50
 """
 
 SYSTEM_PROMPT = f"""You are a strategic intelligence analyst for Blockchain.com.
