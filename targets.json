@@ -1,77 +1,22 @@
 {
-  "_comment": "Scraping targets. Each account has: handle, name, category, tags, notes. Restart bot to apply changes.",
+  "_comment": "Scraping targets — 11 high-signal accounts. Restart bot to apply changes.",
 
   "accounts": [
 
-    {"handle": "TheBlock__",       "name": "The Block",          "category": "media",        "tags": ["media", "news", "institutional"],   "notes": "Leading crypto news outlet, breaks funding rounds and exchange news"},
-    {"handle": "Blockworks_",      "name": "Blockworks",         "category": "media",        "tags": ["media", "news", "institutional"],   "notes": "Institutional-focused crypto media and research"},
-    {"handle": "CoinDesk",         "name": "CoinDesk",           "category": "media",        "tags": ["media", "news"],                   "notes": "Mainstream crypto news, Consensus conference"},
-    {"handle": "Cointelegraph",    "name": "CoinTelegraph",      "category": "media",        "tags": ["media", "news"],                   "notes": "High volume crypto news"},
-    {"handle": "DLNews_",          "name": "DL News",            "category": "media",        "tags": ["media", "news", "defi"],           "notes": "DeFi and on-chain focused journalism"},
-    {"handle": "EleanorTerrett",   "name": "Eleanor Terrett",    "category": "journalist",   "tags": ["journalist", "regulation", "sec"],  "notes": "Fox Business / Crypto in America. Best source on SEC, CFTC, US crypto legislation"},
-    {"handle": "iamDCinvestor",    "name": "DCinvestor",         "category": "journalist",   "tags": ["journalist", "defi", "ethereum"],  "notes": "Influential Ethereum/DeFi writer"},
-    {"handle": "laurashin",        "name": "Laura Shin",         "category": "journalist",   "tags": ["journalist", "news", "podcast"],   "notes": "Unchained podcast, top crypto journalist"},
-    {"handle": "nlw",              "name": "Nathaniel Whittemore","category": "journalist",  "tags": ["journalist", "macro", "bitcoin"],  "notes": "The Breakdown podcast, macro x crypto"},
+    {"handle": "EleanorTerrett",  "name": "Eleanor Terrett",   "category": "journalist", "tags": ["regulation", "sec", "cftc", "us-policy"],       "notes": "Fox Business. Best source on SEC, CFTC and US crypto legislation. Breaks exclusive scoops."},
+    {"handle": "ZachXBT",         "name": "ZachXBT",           "category": "journalist", "tags": ["security", "fraud", "onchain", "investigation"], "notes": "On-chain investigator. Tracks hacks, fraud, and scams. Strong signal on security incidents."},
+    {"handle": "Yueqi_Yang",      "name": "Yueqi Yang",        "category": "journalist", "tags": ["institutional", "regulation", "stablecoins"],    "notes": "The Information, ex-Bloomberg. Breaks institutional scoops on stablecoins and TradFi x crypto."},
+    {"handle": "laurashin",       "name": "Laura Shin",        "category": "journalist", "tags": ["news", "institutional", "podcast"],              "notes": "Unchained podcast. Top crypto journalist, in-depth interviews and industry scoops."},
 
-    {"handle": "brian_armstrong",  "name": "Brian Armstrong",    "category": "competitor",   "tags": ["competitor", "coinbase", "exchange", "ceo"], "notes": "CEO Coinbase. Direct competitor. Watch for product launches, regulatory moves, strategy signals"},
-    {"handle": "cz_binance",       "name": "CZ",                 "category": "competitor",   "tags": ["competitor", "binance", "exchange", "ceo"], "notes": "Ex-CEO Binance. Still influential. Watch for Binance strategy, regulatory commentary"},
-    {"handle": "RichardTeng",      "name": "Richard Teng",       "category": "competitor",   "tags": ["competitor", "binance", "exchange", "ceo"], "notes": "Current CEO Binance"},
-    {"handle": "tyler",            "name": "Tyler Winklevoss",   "category": "competitor",   "tags": ["competitor", "gemini", "exchange"], "notes": "Co-CEO Gemini. Institutional and regulatory angle"},
-    {"handle": "cameron",          "name": "Cameron Winklevoss", "category": "competitor",   "tags": ["competitor", "gemini", "exchange"], "notes": "Co-CEO Gemini"},
-    {"handle": "jessepowellbtc",   "name": "Jesse Powell",       "category": "competitor",   "tags": ["competitor", "kraken", "exchange"], "notes": "Co-founder Kraken. Vocal on regulation and self-custody"},
-    {"handle": "benbybit",         "name": "Ben Zhou",           "category": "competitor",   "tags": ["competitor", "bybit", "exchange", "ceo"], "notes": "CEO Bybit. Watch for Asia market moves"},
-    {"handle": "krakenfx",         "name": "Kraken",             "category": "competitor",   "tags": ["competitor", "kraken", "exchange"], "notes": "Official Kraken account"},
-    {"handle": "coinbase",         "name": "Coinbase",           "category": "competitor",   "tags": ["competitor", "coinbase", "exchange"], "notes": "Official Coinbase account"},
+    {"handle": "TheBlockCo",      "name": "The Block",         "category": "media",      "tags": ["news", "institutional", "fundraising"],          "notes": "Best institutional crypto news source. Covers funding rounds, exchanges and regulation."},
+    {"handle": "Cointelegraph",   "name": "CoinTelegraph",     "category": "media",      "tags": ["news", "market"],                                "notes": "High-volume general crypto news. Good for breaking news and broad market coverage."},
+    {"handle": "tokenterminal",   "name": "Token Terminal",    "category": "media",      "tags": ["data", "fundamentals", "defi", "revenue"],       "notes": "Protocol fundamentals — revenue, TVL, P/F ratio. Signal on who is actually making money."},
 
-    {"handle": "VitalikButerin",   "name": "Vitalik Buterin",    "category": "protocol",     "tags": ["ethereum", "protocol", "layer2", "tech"], "notes": "Ethereum co-founder. Roadmap previews, technical direction"},
-    {"handle": "haydenzadams",     "name": "Hayden Adams",       "category": "protocol",     "tags": ["defi", "dex", "uniswap", "protocol"], "notes": "Uniswap founder. Best DeFi DEX signal"},
-    {"handle": "StaniKulechov",    "name": "Stani Kulechov",     "category": "protocol",     "tags": ["defi", "lending", "aave", "protocol"], "notes": "Aave founder. DeFi lending, governance"},
-    {"handle": "rleshner",         "name": "Robert Leshner",     "category": "protocol",     "tags": ["defi", "lending", "compound", "rwa"], "notes": "Compound founder, now Superstate (tokenized RWA)"},
-    {"handle": "sandeepnailwal",   "name": "Sandeep Nailwal",    "category": "protocol",     "tags": ["layer2", "polygon", "scaling", "protocol"], "notes": "Polygon co-founder. L2/scaling angle"},
-    {"handle": "aeyakovenko",      "name": "Anatoly Yakovenko",  "category": "protocol",     "tags": ["solana", "layer1", "protocol"],     "notes": "Solana co-founder. Watch for Solana ecosystem moves"},
-    {"handle": "jerallaire",       "name": "Jeremy Allaire",     "category": "protocol",     "tags": ["stablecoins", "circle", "usdc", "regulation"], "notes": "Circle CEO. USDC, stablecoin regulation, biggest signal for Blockchain.com stablecoin strategy"},
+    {"handle": "a16zcrypto",      "name": "a16z Crypto",       "category": "vc",         "tags": ["vc", "investment", "trends", "infrastructure"],  "notes": "Andreessen Horowitz crypto arm. Investment theses signal trends 6-12 months ahead."},
+    {"handle": "PanteraCapital",  "name": "Pantera Capital",   "category": "vc",         "tags": ["vc", "macro", "bitcoin", "institutional"],       "notes": "Macro crypto and institutional focus. Signals on market cycles and capital allocation."},
+    {"handle": "paraficapital",   "name": "Parafi Capital",    "category": "vc",         "tags": ["vc", "defi", "infrastructure", "rwa"],           "notes": "DeFi, infrastructure and RWA focus. Early signal on emerging sectors to watch."},
 
-    {"handle": "saylor",           "name": "Michael Saylor",     "category": "institutional","tags": ["institutional", "bitcoin", "treasury", "macro"], "notes": "MicroStrategy. Bitcoin institutional adoption signal"},
-    {"handle": "novogratz",        "name": "Mike Novogratz",     "category": "institutional","tags": ["institutional", "macro", "galaxy", "bitcoin"], "notes": "Galaxy Digital CEO. Macro + institutional crypto"},
-    {"handle": "RaoulGMI",         "name": "Raoul Pal",          "category": "institutional","tags": ["institutional", "macro", "realvision"], "notes": "Real Vision CEO. Macro framework, institutional positioning"},
-    {"handle": "LynAldenContact",  "name": "Lyn Alden",          "category": "institutional","tags": ["macro", "bitcoin", "institutional", "research"], "notes": "Macro analyst. Best signal for BTC vs rates, institutional flows"},
-    {"handle": "ArthurHayes",      "name": "Arthur Hayes",       "category": "institutional","tags": ["macro", "derivatives", "bitmex", "institutional"], "notes": "BitMEX co-founder. Macro x crypto, derivatives market"},
-    {"handle": "haseebq",          "name": "Haseeb Qureshi",     "category": "vc",           "tags": ["vc", "dragonfly", "defi", "research"], "notes": "Dragonfly Capital MD. Top DeFi/infra VC signal"},
-    {"handle": "naval",            "name": "Naval Ravikant",     "category": "vc",           "tags": ["vc", "bitcoin", "philosophy"],      "notes": "AngelList. Bitcoin and tech philosophy"},
+    {"handle": "glassnode",       "name": "Glassnode",         "category": "research",   "tags": ["onchain", "data", "bitcoin", "market"],          "notes": "On-chain analytics platform. Institutional flows, BTC positioning, volatility data."}
 
-    {"handle": "MessariCrypto",    "name": "Messari",            "category": "research",     "tags": ["research", "data", "institutional", "market"], "notes": "Best on-chain data and research threads"},
-    {"handle": "twobitidiot",      "name": "Ryan Selkis",        "category": "research",     "tags": ["research", "messari", "regulation", "market"], "notes": "Messari CEO. Outspoken on regulation and market structure"},
-    {"handle": "WillyWoo",         "name": "Willy Woo",          "category": "research",     "tags": ["research", "onchain", "bitcoin", "data"], "notes": "On-chain analytics and Bitcoin market cycles"},
-    {"handle": "lookonchain",      "name": "Lookonchain",        "category": "research",     "tags": ["onchain", "whale", "data", "flows"],  "notes": "Real-time whale tracking and on-chain large moves"},
-    {"handle": "glassnode",        "name": "Glassnode",          "category": "research",     "tags": ["onchain", "data", "bitcoin", "market"], "notes": "On-chain analytics platform"},
-    {"handle": "Nansen_ai",        "name": "Nansen",             "category": "research",     "tags": ["onchain", "data", "defi", "market"], "notes": "On-chain data, wallet labelling, smart money tracking"},
-    {"handle": "BanklessHQ",       "name": "Bankless",           "category": "media",        "tags": ["defi", "ethereum", "media", "podcast"], "notes": "Top DeFi/Ethereum media. Gauge retail DeFi sentiment"},
-    {"handle": "Camila_Russo",     "name": "Camila Russo",       "category": "journalist",   "tags": ["journalist", "defi", "media"],      "notes": "The Defiant founder. Deep DeFi coverage"},
-
-    {"handle": "PayPal",           "name": "PayPal",             "category": "tradfi",       "tags": ["tradfi", "payments", "stablecoins", "competitor"], "notes": "PYUSD stablecoin. Major payments/crypto competitor"},
-    {"handle": "Ripple",           "name": "Ripple",             "category": "competitor",   "tags": ["competitor", "xrp", "payments", "institutional"], "notes": "Ripple/XRP. Institutional payments angle, regulatory battles"},
-    {"handle": "circle",           "name": "Circle",             "category": "protocol",     "tags": ["stablecoins", "usdc", "regulation", "institutional"], "notes": "USDC issuer. Direct signal for stablecoin landscape"},
-    {"handle": "Tether_to",        "name": "Tether",             "category": "protocol",     "tags": ["stablecoins", "usdt", "institutional"],  "notes": "USDT issuer. Largest stablecoin. Reserve and regulatory updates"},
-
-    {"handle": "ethereum",         "name": "Ethereum Foundation","category": "protocol",     "tags": ["ethereum", "protocol", "tech"],     "notes": "Official Ethereum updates"},
-    {"handle": "Bitcoin",          "name": "Bitcoin Magazine",   "category": "media",        "tags": ["bitcoin", "media", "institutional"], "notes": "Bitcoin-focused media. Institutional adoption angle"},
-    {"handle": "Uniswap",          "name": "Uniswap",            "category": "protocol",     "tags": ["defi", "dex", "protocol"],          "notes": "Official Uniswap. DeFi DEX news"},
-    {"handle": "AaveAave",         "name": "Aave",               "category": "protocol",     "tags": ["defi", "lending", "protocol"],      "notes": "Aave official. DeFi lending market updates"}
-
-  ],
-
-  "keywords": [
-    "Blockchain.com",
-    "#stablecoins",
-    "#RWA",
-    "tokenized assets",
-    "crypto exchange acquisition",
-    "crypto wallet self-custody",
-    "crypto regulation MiCA",
-    "crypto regulation SEC",
-    "GENIUS Act",
-    "#DeFi institutional",
-    "Bitcoin ETF flows",
-    "crypto prime brokerage"
   ]
 }
