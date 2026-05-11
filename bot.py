@@ -1,7 +1,7 @@
 """
 Strategic Watch Bot — main entry point.
 Telegram bot + APScheduler for daily scraping at 8h UTC.
-"""
+""" 
 
 import os
 import asyncio
