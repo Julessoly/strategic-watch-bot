@@ -1,7 +1,7 @@
 """
 Daily digest generator.
 Pulls kept entries from the last 24h and asks Claude Sonnet to synthesise
-a structured memo for Andreas.
+a structured memo for Andreas. 
 """
 import os
 import logging
