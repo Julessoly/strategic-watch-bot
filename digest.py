@@ -1,12 +1,13 @@
 """
 Daily digest generator.
-Pulls kept entries from the last 24h and asks Claude Sonnet to synthesise
-a structured memo for Andreas. 
+Pulls recent entries from the last 24h and asks Claude to synthesise
+a structured memo for Andreas.
 """
+
 import os
 import logging
 from anthropic import Anthropic
-from database import get_recent_kept
+from database import get_recent_entries
 
 logger = logging.getLogger(__name__)
 
@@ -15,20 +16,18 @@ MODEL = "claude-sonnet-4-20250514"
 
 
 def generate_daily_digest(hours: int = 24) -> str:
-    entries = get_recent_kept(hours=hours, limit=80)
+    entries = get_recent_entries(hours=hours, limit=80)
     if not entries:
-        return f"No relevant entries in the last {hours}h."
+        return f"No entries in the last {hours}h."
 
-    import json
     lines = []
     for e in entries:
-        tags = json.loads(e["tags"]) if e.get("tags") else []
-        tag_str = ", ".join(tags[:3]) if tags else "-"
-        score = f"{e['relevance_score']:.2f}" if e.get("relevance_score") else "?"
-        author = e.get("author", "?")
-        src = e.get("source_type", "?")
-        summary = e.get("summary") or e.get("content", "")[:200]
-        lines.append(f"[{src} | @{author} | {tag_str} | score={score}]\n{summary}")
+        source = e.get("source_name", "?")
+        category = e.get("source_category", "?")
+        title = e.get("title", "")
+        content = (e.get("content") or "")[:300]
+        pub = (e.get("published_at") or "")[:10]
+        lines.append(f"[{source} | {category} | {pub}]\n{title}\n{content}")
 
     combined = "\n\n---\n\n".join(lines)
     label = f"last {hours}h"
@@ -48,7 +47,7 @@ Concrete facts, named companies, numbers when available. No fluff.""",
 
 ---
 
-Write a digest structured EXACTLY like this — nothing else:
+Write a digest structured EXACTLY like this - nothing else:
 
 📊 *Strategic Watch — {label}*
 
@@ -59,7 +58,7 @@ Write a digest structured EXACTLY like this — nothing else:
 2 to 3 bullets. New products, launches, technical moves, or business model shifts worth knowing about.
 
 *Actionable for Blockchain.com*
-2 to 3 bullets. Specific, concrete actions or strategic responses Blockchain.com should consider. Name the relevant Blockchain.com product or team when possible (Institutional Services, wallet, OTC desk, SnapMarkets, June AI, etc).
+2 to 3 bullets. Specific, concrete actions or strategic responses Blockchain.com should consider. Name the relevant Blockchain.com product or team when possible (Institutional Services, wallet, OTC desk, SnapMarkets, June AI).
 
 Rules:
 - Be direct. No hype. No "this is exciting" or "this represents a significant opportunity".
