@@ -12,7 +12,7 @@ from typing import Optional
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
-from database import insert_entry, log_scrape_start, log_scrape_finish
+from database import insert_entry
 
 logger = logging.getLogger(__name__)
 
@@ -235,7 +235,6 @@ async def scrape_source(session, source: dict, cutoff: datetime) -> tuple[int, i
 
 
 async def scrape_web_sources() -> dict:
-    run_id = log_scrape_start("web")
     cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
     new_total = skip_total = 0
     errors = []
@@ -260,5 +259,4 @@ async def scrape_web_sources() -> dict:
             new_total += new
             skip_total += skip
 
-    log_scrape_finish(run_id, new_total, errors)
     return {"new": new_total, "skipped": skip_total, "errors": errors}
