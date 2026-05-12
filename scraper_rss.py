@@ -20,22 +20,22 @@ logger = logging.getLogger(__name__)
 # Only confirmed RSS-native feeds here.
 # Sources without RSS go in scraper_web.py.
 
+# Only confirmed RSS-native feeds — tested and verified May 2026.
+# Sources without RSS go in scraper_web.py.
 RSS_FEEDS = [
-    # CEX — RSS natif confirmed
-    {"url": "https://www.coinbase.com/blog/feed",  "name": "Coinbase",  "category": "cex"},
-    {"url": "https://blog.kraken.com/feed",        "name": "Kraken",    "category": "cex"},
-    {"url": "https://blog.bitfinex.com/feed",      "name": "Bitfinex",  "category": "cex"},
-    {"url": "https://blog.bitstamp.net/feed",      "name": "Bitstamp",  "category": "cex"},
-    {"url": "https://blog.bitmex.com/feed/",       "name": "BitMEX",    "category": "cex"},
-    # General news — RSS natif confirmed
-    {"url": "https://www.theblock.co/rss.xml",     "name": "The Block",   "category": "news"},
-    {"url": "https://blockworks.co/feed",          "name": "Blockworks",  "category": "news"},
-    {"url": "https://www.dlnews.com/feed",         "name": "DL News",     "category": "news"},
-    {"url": "https://cointelegraph.com/rss",       "name": "Cointelegraph","category": "news"},
-    # Research / Innovation
-    {"url": "https://a16zcrypto.com/feed",         "name": "a16z Crypto", "category": "research"},
-    {"url": "https://paradigm.xyz/feed",           "name": "Paradigm",    "category": "research"},
-    {"url": "https://multicoin.capital/feed/",     "name": "Multicoin",   "category": "research"},
+    # CEX — RSS natif verified
+    {"url": "https://blog.kraken.com/feed",               "name": "Kraken",       "category": "cex"},
+    {"url": "https://blog.bitfinex.com/feed",             "name": "Bitfinex",     "category": "cex"},
+    {"url": "https://blog.bitmex.com/feed/",              "name": "BitMEX",       "category": "cex"},
+    # General news — RSS natif verified
+    {"url": "https://www.theblock.co/rss.xml",            "name": "The Block",    "category": "news"},
+    {"url": "https://blockworks.co/feed",                 "name": "Blockworks",   "category": "news"},
+    {"url": "https://cointelegraph.com/rss",              "name": "Cointelegraph","category": "news"},
+    # Research / Innovation — RSS natif verified
+    {"url": "https://multicoin.capital/rss.xml",          "name": "Multicoin",    "category": "research"},
+    {"url": "https://a16zcrypto.substack.com/feed",       "name": "a16z Crypto",  "category": "research"},
+    # NOT included (no RSS confirmed): Coinbase, Bitstamp, Gemini, DL News, Paradigm
+    # → add those in scraper_web.py
 ]
 
 
