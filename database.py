@@ -43,16 +43,7 @@ def init_db():
             raise_valuation_usd  REAL
         )
     """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS scrape_runs (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            source_type TEXT NOT NULL,
-            started_at  TEXT NOT NULL,
-            finished_at TEXT,
-            new_entries INTEGER DEFAULT 0,
-            errors      TEXT DEFAULT '[]'
-        )
-    """)
+
     conn.commit()
     logger.info("DB initialized")
 
@@ -177,26 +168,3 @@ def _row_to_dict(row) -> dict:
         except Exception:
             pass
     return d
-
-
-# --- Scrape run log ---
-
-def log_scrape_start(source_type: str) -> int:
-    now = datetime.utcnow().isoformat()
-    conn = get_conn()
-    cursor = conn.execute(
-        "INSERT INTO scrape_runs (source_type, started_at) VALUES (?, ?)",
-        (source_type, now)
-    )
-    conn.commit()
-    return cursor.lastrowid
-
-
-def log_scrape_finish(run_id: int, new_entries: int, errors: list[str]):
-    now = datetime.utcnow().isoformat()
-    conn = get_conn()
-    conn.execute(
-        "UPDATE scrape_runs SET finished_at=?, new_entries=?, errors=? WHERE id=?",
-        (now, new_entries, json.dumps(errors), run_id)
-    )
-    conn.commit()
