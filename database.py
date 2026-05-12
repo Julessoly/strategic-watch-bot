@@ -16,8 +16,8 @@ TURSO_AUTH_TOKEN   = os.environ.get("TURSO_AUTH_TOKEN", "")
 
 
 def get_conn():
-    import libsql_experimental as libsql
-    return libsql.connect(database=TURSO_DATABASE_URL, auth_token=TURSO_AUTH_TOKEN)
+    import libsql_client as libsql
+    return libsql.create_client_sync(url=TURSO_DATABASE_URL, auth_token=TURSO_AUTH_TOKEN)
 
 
 def init_db():
@@ -43,8 +43,6 @@ def init_db():
             raise_valuation_usd  REAL
         )
     """)
-
-    conn.commit()
     logger.info("DB initialized")
 
 
@@ -66,11 +64,11 @@ def insert_entry(
     raise_valuation_usd: Optional[float] = None,
 ) -> Optional[int]:
     """
-    Insert a new entry. Returns row ID if inserted, None if duplicate (URL already exists).
+    Insert a new entry. Returns row ID if inserted, None if duplicate.
     """
     conn = get_conn()
     try:
-        cursor = conn.execute(
+        result = conn.execute(
             """
             INSERT INTO entries (
                 source_type, source_category, source_name, source_url,
@@ -88,11 +86,10 @@ def insert_entry(
                 raise_valuation_usd,
             )
         )
-        conn.commit()
-        return cursor.lastrowid
+        return result.last_insert_rowid
     except Exception as e:
         if "UNIQUE constraint failed" in str(e):
-            return None  # Duplicate - silently skip
+            return None
         logger.error(f"DB insert error [{source_url}]: {e}")
         return None
 
@@ -100,45 +97,45 @@ def insert_entry(
 def get_recent_entries(hours: int = 24, limit: int = 200, source_category: Optional[str] = None) -> list[dict]:
     conn = get_conn()
     if source_category:
-        rows = conn.execute(
+        result = conn.execute(
             "SELECT * FROM entries WHERE ingested_at >= datetime('now', ?) AND source_category = ? ORDER BY ingested_at DESC LIMIT ?",
             (f"-{hours} hours", source_category, limit)
-        ).fetchall()
+        )
     else:
-        rows = conn.execute(
+        result = conn.execute(
             "SELECT * FROM entries WHERE ingested_at >= datetime('now', ?) ORDER BY ingested_at DESC LIMIT ?",
             (f"-{hours} hours", limit)
-        ).fetchall()
-    return [_row_to_dict(r) for r in rows]
+        )
+    return [_row_to_dict(r) for r in result.rows]
 
 
 def search_entries(query: str, limit: int = 20) -> list[dict]:
     conn = get_conn()
     like = f"%{query}%"
-    rows = conn.execute(
+    result = conn.execute(
         "SELECT * FROM entries WHERE title LIKE ? OR content LIKE ? ORDER BY ingested_at DESC LIMIT ?",
         (like, like, limit)
-    ).fetchall()
-    return [_row_to_dict(r) for r in rows]
+    )
+    return [_row_to_dict(r) for r in result.rows]
 
 
 def get_all_entries(limit: int = 2000) -> list[dict]:
     conn = get_conn()
-    rows = conn.execute("SELECT * FROM entries ORDER BY ingested_at DESC LIMIT ?", (limit,)).fetchall()
-    return [_row_to_dict(r) for r in rows]
+    result = conn.execute("SELECT * FROM entries ORDER BY ingested_at DESC LIMIT ?", (limit,))
+    return [_row_to_dict(r) for r in result.rows]
 
 
 def get_stats() -> dict:
     conn = get_conn()
-    total = conn.execute("SELECT COUNT(*) FROM entries").fetchone()[0]
-    by_category = conn.execute("SELECT source_category, COUNT(*) FROM entries GROUP BY source_category").fetchall()
-    by_type     = conn.execute("SELECT source_type, COUNT(*) FROM entries GROUP BY source_type").fetchall()
-    last        = conn.execute("SELECT ingested_at FROM entries ORDER BY ingested_at DESC LIMIT 1").fetchone()
+    total       = conn.execute("SELECT COUNT(*) FROM entries").rows[0][0]
+    by_category = conn.execute("SELECT source_category, COUNT(*) FROM entries GROUP BY source_category").rows
+    by_type     = conn.execute("SELECT source_type, COUNT(*) FROM entries GROUP BY source_type").rows
+    last        = conn.execute("SELECT ingested_at FROM entries ORDER BY ingested_at DESC LIMIT 1").rows
     return {
-        "total":        total,
-        "by_category":  {row[0] or "unknown": row[1] for row in by_category},
-        "by_type":      {row[0]: row[1] for row in by_type},
-        "last_ingested": (last[0] or "")[:19] if last else "N/A",
+        "total":         total,
+        "by_category":   {row[0] or "unknown": row[1] for row in by_category},
+        "by_type":       {row[0]: row[1] for row in by_type},
+        "last_ingested": (last[0][0] or "")[:19] if last else "N/A",
     }
 
 
@@ -148,10 +145,8 @@ def get_last_ingested_per_source() -> dict:
     Used by the health check to detect broken sources.
     """
     conn = get_conn()
-    rows = conn.execute(
-        "SELECT source_name, MAX(ingested_at) FROM entries GROUP BY source_name"
-    ).fetchall()
-    return {row[0]: row[1] for row in rows}
+    result = conn.execute("SELECT source_name, MAX(ingested_at) FROM entries GROUP BY source_name")
+    return {row[0]: row[1] for row in result.rows}
 
 
 def _row_to_dict(row) -> dict:
