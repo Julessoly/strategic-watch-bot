@@ -4,7 +4,7 @@ apscheduler==3.10.4
 aiohttp==3.9.5
 feedparser==6.0.11
 trafilatura==1.12.2
-libsql-experimental==0.0.25
+libsql-client==0.3.1
 beautifulsoup4==4.12.3
 lxml[html_clean]==5.2.2
 lxml-html-clean==0.4.1
