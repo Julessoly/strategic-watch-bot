@@ -4,3 +4,4 @@ apscheduler==3.10.4
 aiohttp==3.9.5
 feedparser==6.0.11
 trafilatura==1.12.2
+libsql-experimental==0.0.25
