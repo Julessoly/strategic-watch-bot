@@ -1,7 +1,5 @@
 """
-RSS scraper — competitor blogs and research sources.
-Fetches articles from the last 24h, extracts full content via trafilatura.
-Inserts into Turso DB with full source metadata.
+RSS scraper — 9 sources confirmées et testées.
 """
 
 import logging
@@ -16,169 +14,129 @@ from database import insert_entry, log_scrape_start, log_scrape_finish
 
 logger = logging.getLogger(__name__)
 
-# ─── Feed registry ────────────────────────────────────────────────────────────
-# Only confirmed RSS-native feeds here.
-# Sources without RSS go in scraper_web.py.
-
-# Only confirmed RSS-native feeds — tested and verified May 2026.
-# Sources without RSS go in scraper_web.py.
 RSS_FEEDS = [
-    # CEX — RSS natif verified
-    {"url": "https://blog.kraken.com/feed",               "name": "Kraken",       "category": "cex"},
-    {"url": "https://blog.bitfinex.com/feed",             "name": "Bitfinex",     "category": "cex"},
-    {"url": "https://blog.bitmex.com/feed/",              "name": "BitMEX",       "category": "cex"},
-    # General news — RSS natif verified
-    {"url": "https://www.theblock.co/rss.xml",            "name": "The Block",    "category": "news"},
-    {"url": "https://blockworks.co/feed",                 "name": "Blockworks",   "category": "news"},
-    {"url": "https://cointelegraph.com/rss",              "name": "Cointelegraph","category": "news"},
-    # Research / Innovation — RSS natif verified
-    {"url": "https://multicoin.capital/rss.xml",          "name": "Multicoin",    "category": "research"},
-    {"url": "https://a16zcrypto.substack.com/feed",       "name": "a16z Crypto",  "category": "research"},
-    # NOT included (no RSS confirmed): Coinbase, Bitstamp, Gemini, DL News, Paradigm
-    # → add those in scraper_web.py
+    # CEX
+    {"url": "https://blog.kraken.com/feed",              "name": "Kraken",        "category": "cex"},
+    {"url": "https://blog.bitfinex.com/feed",            "name": "Bitfinex",      "category": "cex"},
+    {"url": "https://blog.bitmex.com/feed/",             "name": "BitMEX",        "category": "cex"},
+    # Institutional
+    {"url": "https://www.fireblocks.com/blog/feed",      "name": "Fireblocks",    "category": "institutional"},
+    # Research
+    {"url": "https://a16zcrypto.substack.com/feed",      "name": "a16z Crypto",   "category": "research"},
+    {"url": "https://multicoin.capital/rss.xml",         "name": "Multicoin",     "category": "research"},
+    # News
+    {"url": "https://www.theblock.co/rss.xml",           "name": "The Block",     "category": "news"},
+    {"url": "https://cointelegraph.com/rss",             "name": "Cointelegraph", "category": "news"},
+    {"url": "https://blockworks.co/feed",                "name": "Blockworks",    "category": "news"},
 ]
 
-
-# ─── Helpers ──────────────────────────────────────────────────────────────────
-
-def _cutoff() -> datetime:
-    return datetime.now(timezone.utc) - timedelta(hours=24)
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36"
+}
 
 
 def _parse_date(entry) -> Optional[str]:
-    import time as _time
-    for field in ("published_parsed", "updated_parsed"):
-        val = getattr(entry, field, None)
-        if val:
-            try:
-                return datetime.fromtimestamp(_time.mktime(val), tz=timezone.utc).isoformat()
-            except Exception:
-                pass
+    if hasattr(entry, "published_parsed") and entry.published_parsed:
+        try:
+            return datetime(*entry.published_parsed[:6], tzinfo=timezone.utc).isoformat()
+        except Exception:
+            pass
+    if hasattr(entry, "updated_parsed") and entry.updated_parsed:
+        try:
+            return datetime(*entry.updated_parsed[:6], tzinfo=timezone.utc).isoformat()
+        except Exception:
+            pass
     return None
 
 
-def _is_recent(entry, cutoff: datetime) -> bool:
-    import time as _time
-    for field in ("published_parsed", "updated_parsed"):
-        val = getattr(entry, field, None)
-        if val:
-            try:
-                pub = datetime.fromtimestamp(_time.mktime(val), tz=timezone.utc)
-                return pub >= cutoff
-            except Exception:
-                pass
-    return True  # no date → include by default
-
-
-async def _fetch_content(session: aiohttp.ClientSession, url: str, max_chars: int = 4000) -> Optional[str]:
-    """Fetch full article text via trafilatura. Returns None if blocked or failed."""
+async def _fetch_content(session, url: str) -> Optional[str]:
     try:
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        }
-        async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=15)) as resp:
-            if resp.status != 200:
-                logger.debug(f"HTTP {resp.status} for {url}")
+        async with session.get(url, headers=HEADERS, timeout=aiohttp.ClientTimeout(total=15)) as r:
+            if r.status != 200:
                 return None
-            html = await resp.text()
-        text = trafilatura.extract(
-            html,
-            include_comments=False,
-            include_tables=False,
-            no_fallback=False,
-            favor_recall=True,
-        )
-        return text[:max_chars] if text else None
+            html = await r.text()
+        text = trafilatura.extract(html, favor_recall=True, include_comments=False)
+        return text[:4000] if text else None
     except Exception as e:
-        logger.debug(f"Content fetch failed for {url}: {e}")
+        logger.debug(f"Content fetch failed [{url}]: {e}")
         return None
 
 
-# ─── Per-feed scraper ─────────────────────────────────────────────────────────
-
-async def scrape_feed(session: aiohttp.ClientSession, feed: dict, cutoff: datetime) -> tuple[int, int]:
-    """Scrape one RSS feed. Returns (new, skipped)."""
-    url      = feed["url"]
-    name     = feed["name"]
-    category = feed["category"]
+async def scrape_feed(session, feed: dict, cutoff: datetime) -> tuple[int, int]:
+    name = feed["name"]
+    new = skipped = 0
 
     try:
-        async with session.get(url, timeout=aiohttp.ClientTimeout(total=20)) as resp:
-            raw = await resp.text()
-        parsed = feedparser.parse(raw)
+        async with session.get(feed["url"], headers=HEADERS, timeout=aiohttp.ClientTimeout(total=15)) as r:
+            if r.status != 200:
+                logger.warning(f"[{name}] HTTP {r.status}")
+                return 0, 0
+            raw = await r.text()
     except Exception as e:
-        logger.error(f"RSS fetch error [{name}]: {e}")
+        logger.warning(f"[{name}] Feed fetch failed: {e}")
         return 0, 0
 
+    parsed = feedparser.parse(raw)
     if not parsed.entries:
-        logger.warning(f"[{name}] No entries found in feed")
+        logger.warning(f"[{name}] 0 entries")
         return 0, 0
-
-    new_count = skip_count = 0
 
     for entry in parsed.entries:
-        if not _is_recent(entry, cutoff):
-            continue
+        pub_date = _parse_date(entry)
+        if pub_date:
+            pub_dt = datetime.fromisoformat(pub_date)
+            if pub_dt.tzinfo is None:
+                pub_dt = pub_dt.replace(tzinfo=timezone.utc)
+            if pub_dt < cutoff:
+                continue
 
-        article_url = entry.get("link", "").strip()
-        title       = entry.get("title", "").strip()
-        rss_summary = entry.get("summary", "") or entry.get("description", "")
-
+        article_url = entry.get("link", "")
         if not article_url:
             continue
 
-        # Try full article content, fallback to RSS title + summary
-        content = await _fetch_content(session, article_url)
-        if not content:
-            content = f"{title}\n\n{rss_summary}"[:2000]
-        if not content.strip():
-            continue
+        title = entry.get("title", "").strip()
+        content = entry.get("summary", "") or ""
+        if not content or len(content) < 200:
+            content = await _fetch_content(session, article_url) or content
+        content = content[:4000]
 
         row_id = insert_entry(
             source_type="rss",
-            source_category=category,
+            source_category=feed["category"],
             source_name=name,
             source_url=article_url,
-            author=name,
+            author=entry.get("author", name),
             title=title,
             content=content,
-            published_at=_parse_date(entry),
+            published_at=pub_date,
         )
         if row_id:
-            new_count += 1
+            new += 1
         else:
-            skip_count += 1
+            skipped += 1
+        await asyncio.sleep(0.5)
 
-    logger.info(f"[{name}] new={new_count} skipped={skip_count}")
-    return new_count, skip_count
+    logger.info(f"[{name}] new={new} skipped={skipped}")
+    return new, skipped
 
-
-# ─── Main job ─────────────────────────────────────────────────────────────────
 
 async def scrape_rss_feeds() -> dict:
-    """Scrape all RSS feeds. Returns {new, skipped, errors}."""
-    run_id    = log_scrape_start("rss")
-    cutoff    = _cutoff()
+    run_id = log_scrape_start("rss")
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
     new_total = skip_total = 0
-    errors    = []
+    errors = []
 
     async with aiohttp.ClientSession() as session:
-        tasks   = [scrape_feed(session, feed, cutoff) for feed in RSS_FEEDS]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
-    for feed, result in zip(RSS_FEEDS, results):
-        if isinstance(result, Exception):
-            msg = f"{feed['name']}: {result}"
-            logger.error(msg)
-            errors.append(msg)
-        else:
-            new, skip = result
-            new_total  += new
-            skip_total += skip
+        for feed in RSS_FEEDS:
+            try:
+                new, skip = await scrape_feed(session, feed, cutoff)
+                new_total += new
+                skip_total += skip
+            except Exception as e:
+                msg = f"{feed['name']}: {e}"
+                logger.error(msg)
+                errors.append(msg)
+            await asyncio.sleep(1)
 
     log_scrape_finish(run_id, new_total, errors)
-    logger.info(
-        f"RSS scrape done — {len(RSS_FEEDS)} feeds · "
-        f"new={new_total} skipped={skip_total} errors={len(errors)}"
-    )
     return {"new": new_total, "skipped": skip_total, "errors": errors}
