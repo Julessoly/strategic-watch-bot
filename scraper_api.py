@@ -10,7 +10,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional
 from bs4 import BeautifulSoup
 
-from database import insert_entry, log_scrape_start, log_scrape_finish
+from database import insert_entry
 
 logger = logging.getLogger(__name__)
 
@@ -147,7 +147,6 @@ async def scrape_drw(session: aiohttp.ClientSession, cutoff: datetime) -> tuple[
 # ─── Main ─────────────────────────────────────────────────────────────────────
 
 async def scrape_api_sources() -> dict:
-    run_id = log_scrape_start("api")
     cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
     new_total = skip_total = 0
     errors = []
@@ -163,5 +162,4 @@ async def scrape_api_sources() -> dict:
                 logger.error(msg)
                 errors.append(msg)
 
-    log_scrape_finish(run_id, new_total, errors)
     return {"new": new_total, "skipped": skip_total, "errors": errors}
