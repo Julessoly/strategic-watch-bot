@@ -1,5 +1,6 @@
 """
 RSS scraper — 9 confirmed and tested sources.
+Always fetches full article content via trafilatura.
 """
 
 import logging
@@ -7,6 +8,7 @@ import asyncio
 import aiohttp
 import feedparser
 import trafilatura
+from bs4 import BeautifulSoup
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
@@ -49,16 +51,28 @@ def _parse_date(entry) -> Optional[str]:
     return None
 
 
-async def _fetch_content(session, url: str) -> Optional[str]:
+def _strip_html(html: str) -> str:
+    """Remove HTML tags and return plain text."""
+    soup = BeautifulSoup(html, "html.parser")
+    return soup.get_text(separator=" ", strip=True)
+
+
+async def _fetch_article(session, url: str) -> Optional[str]:
+    """Fetch full article content via trafilatura. Falls back to RSS summary stripped of HTML."""
     try:
-        async with session.get(url, headers=HEADERS, timeout=aiohttp.ClientTimeout(total=15)) as r:
+        async with session.get(url, headers=HEADERS, timeout=aiohttp.ClientTimeout(total=20)) as r:
             if r.status != 200:
                 return None
             html = await r.text()
-        text = trafilatura.extract(html, favor_recall=True, include_comments=False)
+        text = trafilatura.extract(
+            html,
+            favor_recall=True,
+            include_comments=False,
+            include_tables=False,
+        )
         return text[:4000] if text else None
     except Exception as e:
-        logger.debug(f"Content fetch failed [{url}]: {e}")
+        logger.debug(f"Article fetch failed [{url}]: {e}")
         return None
 
 
@@ -82,6 +96,7 @@ async def scrape_feed(session, feed: dict, cutoff: datetime) -> tuple[int, int]:
         return 0, 0
 
     for entry in parsed.entries:
+        # Date filter
         pub_date = _parse_date(entry)
         if pub_date:
             pub_dt = datetime.fromisoformat(pub_date)
@@ -95,9 +110,15 @@ async def scrape_feed(session, feed: dict, cutoff: datetime) -> tuple[int, int]:
             continue
 
         title = entry.get("title", "").strip()
-        content = entry.get("summary", "") or ""
-        if not content or len(content) < 200:
-            content = await _fetch_content(session, article_url) or content
+
+        # Always try to fetch full article first
+        content = await _fetch_article(session, article_url)
+
+        # Fallback: use RSS summary stripped of HTML
+        if not content:
+            raw_summary = entry.get("summary", "") or ""
+            content = _strip_html(raw_summary) if raw_summary else ""
+
         content = content[:4000]
 
         row_id = insert_entry(
