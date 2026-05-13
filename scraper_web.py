@@ -1,11 +1,11 @@
 """
-Web scraper — 11 sources scraping HTML confirmées et testées.
+Web scraper v1 — listing pages only.
+Extracts title + date + URL from listing pages. No article content fetch.
 """
 
 import logging
 import asyncio
 import aiohttp
-import trafilatura
 import re
 from datetime import datetime, timezone, timedelta
 from typing import Optional
@@ -20,226 +20,92 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36"
 }
 
-# Chaque source : url listing, name, category, pattern regex, prefix pour liens relatifs
-WEB_SOURCES = [
-    # CEX
-    {
-        "url": "https://www.coinbase.com/blog",
-        "name": "Coinbase",
-        "category": "cex",
-        "pattern": r"coinbase\.com/blog/[a-z0-9\-]{10,}",
-        "prefix": "https://www.coinbase.com",
-    },
-    {
-        "url": "https://www.gemini.com/blog",
-        "name": "Gemini",
-        "category": "cex",
-        "pattern": r"gemini\.com/blog/[a-z0-9\-]{10,}",
-        "prefix": "",
-    },
-    # Institutional
-    {
-        "url": "https://www.bullish.com/eu/news-insights",
-        "name": "Bullish",
-        "category": "institutional",
-        "pattern": r"/eu/news-insights/[a-z0-9\-]{10,}",
-        "prefix": "https://www.bullish.com",
-    },
-    # OTC
-    {
-        "url": "https://www.wintermute.com/insights/discover?category=announcements",
-        "name": "Wintermute",
-        "category": "otc",
-        "pattern": r"wintermute\.com/insights/[a-z\-]+/[a-z\-]+/[a-z0-9\-]{10,}",
-        "prefix": "https://www.wintermute.com",
-    },
-    {
-        "url": "https://www.gsr.io/media",
-        "name": "GSR",
-        "category": "otc",
-        "pattern": r"gsr\.io/insights/[a-z0-9\-]{10,}",
-        "prefix": "",
-    },
-    {
-        "url": "https://www.falconx.io/newsroom",
-        "name": "FalconX",
-        "category": "otc",
-        "pattern": r"falconx\.io/newsroom/[a-z0-9\-]{10,}",
-        "prefix": "",
-    },
-    # Stablecoins
-    {
-        "url": "https://www.circle.com/pressroom",
-        "name": "Circle",
-        "category": "stablecoins",
-        "pattern": r"circle\.com/pressroom/[a-z0-9\-]{10,}",
-        "prefix": "",
-    },
-    {
-        "url": "https://tether.io/news/",
-        "name": "Tether",
-        "category": "stablecoins",
-        "pattern": r"tether\.io/news/[a-z0-9\-]{10,}",
-        "prefix": "",
-    },
-    {
-        "url": "https://www.paxos.com/newsroom",
-        "name": "Paxos",
-        "category": "stablecoins",
-        "pattern": r"paxos\.com/newsroom/[a-z0-9\-]{10,}",
-        "prefix": "https://www.paxos.com",
-    },
-    # Prediction
-    {
-        "url": "https://news.kalshi.com/",
-        "name": "Kalshi",
-        "category": "prediction",
-        "pattern": r"kalshi\.com/p/[a-z0-9\-]{5,}",
-        "prefix": "https://kalshi.com",
-    },
-    # News
-    {
-        "url": "https://www.dlnews.com/articles/",
-        "name": "DL News",
-        "category": "news",
-        "pattern": r"dlnews\.com/articles/[a-z\-]+/[a-z0-9\-]{10,}",
-        "prefix": "",
-    },
-]
 
-
-def _extract_links(html: str, source: dict) -> list[str]:
-    pattern = re.compile(source["pattern"], re.IGNORECASE)
-    prefix = source.get("prefix", "")
-    base = source["url"]
-    seen = set()
-    links = []
-
-    soup = BeautifulSoup(html, "html.parser")
-    for tag in soup.find_all("a", href=True):
-        href = tag["href"].strip()
-        if href.startswith("http"):
-            full = href
-        elif href.startswith("/"):
-            full = prefix + href if prefix else urljoin(base, href)
-        else:
-            full = urljoin(base, href)
-
-        # Nettoie query string
-        full = full.split("?")[0].split("#")[0]
-
-        if pattern.search(full) and full not in seen:
-            seen.add(full)
-            links.append(full)
-
-    return links
-
-
-def _extract_title(html: str) -> str:
-    soup = BeautifulSoup(html, "html.parser")
-    og = soup.find("meta", property="og:title")
-    if og and og.get("content"):
-        return og["content"].strip()
-    title = soup.find("title")
-    return title.get_text(strip=True) if title else ""
-
-
-def _extract_date(html: str) -> Optional[str]:
-    soup = BeautifulSoup(html, "html.parser")
-
-    # 1. <time datetime="...">
-    for tag in soup.find_all("time"):
-        dt = tag.get("datetime", "")
-        if dt:
-            try:
-                return datetime.fromisoformat(dt.replace("Z", "+00:00")).isoformat()
-            except Exception:
-                pass
-
-    # 2. <meta property="article:published_time"> or name="datePublished"
-    for meta in soup.find_all("meta"):
-        prop = meta.get("property", "") or meta.get("name", "")
-        if prop in ("article:published_time", "datePublished", "og:article:published_time"):
-            val = meta.get("content", "")
-            if val:
-                try:
-                    return datetime.fromisoformat(val.replace("Z", "+00:00")).isoformat()
-                except Exception:
-                    pass
-
-    # 3. JSON-LD
-    import json as _json
-    for script in soup.find_all("script", type="application/ld+json"):
+def _parse_date_text(text: str) -> Optional[str]:
+    """
+    Parse various date text formats into ISO string.
+    Handles: 'May 11, 2026' / 'May 11th, 2026' / 'April 14th, 2026' /
+             'MAY 12, 2026' / 'MAY 5, 2026'
+    """
+    if not text:
+        return None
+    text = re.sub(r'(\d+)(st|nd|rd|th)', r'\1', text).strip()
+    for fmt in ("%B %d, %Y", "%b %d, %Y"):
         try:
-            data = _json.loads(script.string or "")
-            if isinstance(data, list):
-                data = data[0]
-            for key in ("datePublished", "dateCreated", "uploadDate"):
-                if key in data:
-                    return datetime.fromisoformat(data[key].replace("Z", "+00:00")).isoformat()
-        except Exception:
+            dt = datetime.strptime(text, fmt)
+            return dt.replace(tzinfo=timezone.utc).isoformat()
+        except ValueError:
             pass
-
     return None
 
 
-async def scrape_source(session, source: dict, cutoff: datetime) -> tuple[int, int]:
-    name = source["name"]
+# ─── Coinbase ─────────────────────────────────────────────────────────────────
+
+async def scrape_coinbase(session, cutoff: datetime) -> tuple[int, int]:
+    url = "https://www.coinbase.com/blog"
     new = skipped = 0
 
-    # Fetch listing page
     try:
-        async with session.get(source["url"], headers=HEADERS, timeout=aiohttp.ClientTimeout(total=20)) as r:
+        async with session.get(url, headers=HEADERS, timeout=aiohttp.ClientTimeout(total=20)) as r:
             if r.status != 200:
-                logger.warning(f"[{name}] Listing HTTP {r.status}")
+                logger.warning(f"[Coinbase] HTTP {r.status}")
                 return 0, 0
             html = await r.text()
     except Exception as e:
-        logger.warning(f"[{name}] Listing fetch failed: {e}")
+        logger.warning(f"[Coinbase] Fetch failed: {e}")
         return 0, 0
 
-    links = _extract_links(html, source)
-    if not links:
-        logger.warning(f"[{name}] 0 links matched")
+    soup = BeautifulSoup(html, "html.parser")
+
+    # Find "Most recent" h2 and take articles after it
+    most_recent = soup.find("h2", string=re.compile(r"most recent", re.IGNORECASE))
+    if not most_recent:
+        logger.warning("[Coinbase] Could not find 'Most recent' section")
         return 0, 0
 
-    logger.debug(f"[{name}] {len(links)} links found")
+    cards = []
+    for sibling in most_recent.find_next_siblings():
+        cards.extend(sibling.find_all("div", {"data-testid": "card-article"}))
+    
+    if not cards:
+        logger.warning("[Coinbase] 0 articles found after 'Most recent'")
+        return 0, 0
 
-    for url in links[:10]:  # max 10 articles per source
-        try:
-            async with session.get(url, headers=HEADERS, timeout=aiohttp.ClientTimeout(total=15)) as r:
-                if r.status != 200:
-                    continue
-                article_html = await r.text()
-        except Exception:
+    for card in cards[:10]:
+        link = card.find("a", {"data-testid": "card-article-link-overlay"})
+        if not link:
             continue
+        href = link.get("href", "")
+        article_url = f"https://www.coinbase.com{href}" if href.startswith("/") else href
 
-        # Filtre date
-        pub_date = _extract_date(article_html)
+        title_tag = card.find("h3", {"data-testid": "card-article-title"})
+        title = title_tag.get_text(strip=True) if title_tag else ""
+
+        # Date is the last span in the card
+        spans = card.find_all("span")
+        date_text = ""
+        for span in reversed(spans):
+            t = span.get_text(strip=True)
+            if re.match(r"[A-Za-z]+ \d+,? \d{4}", t):
+                date_text = t
+                break
+        pub_date = _parse_date_text(date_text)
+
         if pub_date:
-            try:
-                pub_dt = datetime.fromisoformat(pub_date)
-                if pub_dt.tzinfo is None:
-                    pub_dt = pub_dt.replace(tzinfo=timezone.utc)
-                if pub_dt < cutoff:
-                    continue
-            except Exception:
-                pass
-
-        text = trafilatura.extract(article_html, favor_recall=True, include_comments=False)
-        if not text or len(text.strip()) < 100:
-            continue
-
-        title = _extract_title(article_html)
+            pub_dt = datetime.fromisoformat(pub_date)
+            if pub_dt.tzinfo is None:
+                pub_dt = pub_dt.replace(tzinfo=timezone.utc)
+            if pub_dt < cutoff:
+                continue
 
         row_id = insert_entry(
             source_type="scraping",
-            source_category=source["category"],
-            source_name=name,
-            source_url=url,
-            author=name,
+            source_category="cex",
+            source_name="Coinbase",
+            source_url=article_url,
+            author="Coinbase",
             title=title,
-            content=text[:4000],
+            content="",
             published_at=pub_date,
         )
         if row_id:
@@ -247,35 +113,181 @@ async def scrape_source(session, source: dict, cutoff: datetime) -> tuple[int, i
         else:
             skipped += 1
 
-        await asyncio.sleep(1)
-
-    logger.info(f"[{name}] new={new} skipped={skipped}")
+    logger.info(f"[Coinbase] new={new} skipped={skipped}")
     return new, skipped
 
 
+# ─── Gemini ───────────────────────────────────────────────────────────────────
+
+async def scrape_gemini(session, cutoff: datetime) -> tuple[int, int]:
+    url = "https://www.gemini.com/blog/type/company"
+    new = skipped = 0
+
+    try:
+        async with session.get(url, headers=HEADERS, timeout=aiohttp.ClientTimeout(total=20)) as r:
+            if r.status != 200:
+                logger.warning(f"[Gemini] HTTP {r.status}")
+                return 0, 0
+            html = await r.text()
+    except Exception as e:
+        logger.warning(f"[Gemini] Fetch failed: {e}")
+        return 0, 0
+
+    soup = BeautifulSoup(html, "html.parser")
+
+    # Each article is wrapped in <a class="group block" href="/blog/...">
+    articles = soup.find_all("a", class_=lambda c: c and "group" in c and "block" in c)
+
+    for article in articles[:10]:
+        href = article.get("href", "")
+        if not href.startswith("/blog/"):
+            continue
+        article_url = f"https://www.gemini.com{href}"
+
+        # Title: <p class="...body-lg-regular...">
+        title_tag = article.find("p", class_=lambda c: c and "body-lg-regular" in c)
+        title = title_tag.get_text(strip=True) if title_tag else ""
+
+        # Date: <p class="...text-gray-700...">
+        date_tag = article.find("p", class_=lambda c: c and "text-gray-700" in c)
+        date_text = date_tag.get_text(strip=True) if date_tag else ""
+        pub_date = _parse_date_text(date_text)
+
+        if pub_date:
+            pub_dt = datetime.fromisoformat(pub_date)
+            if pub_dt.tzinfo is None:
+                pub_dt = pub_dt.replace(tzinfo=timezone.utc)
+            if pub_dt < cutoff:
+                continue
+
+        row_id = insert_entry(
+            source_type="scraping",
+            source_category="cex",
+            source_name="Gemini",
+            source_url=article_url,
+            author="Gemini",
+            title=title,
+            content="",
+            published_at=pub_date,
+        )
+        if row_id:
+            new += 1
+        else:
+            skipped += 1
+
+    logger.info(f"[Gemini] new={new} skipped={skipped}")
+    return new, skipped
+
+
+# ─── Bullish ──────────────────────────────────────────────────────────────────
+
+async def scrape_bullish(session, cutoff: datetime) -> tuple[int, int]:
+    url = "https://www.bullish.com/eu/news-insights"
+    new = skipped = 0
+
+    try:
+        async with session.get(url, headers=HEADERS, timeout=aiohttp.ClientTimeout(total=20)) as r:
+            if r.status != 200:
+                logger.warning(f"[Bullish] HTTP {r.status}")
+                return 0, 0
+            html = await r.text()
+    except Exception as e:
+        logger.warning(f"[Bullish] Fetch failed: {e}")
+        return 0, 0
+
+    soup = BeautifulSoup(html, "html.parser")
+
+    # Each article: <div role="listitem" class="w-dyn-item">
+    items = soup.find_all("div", {"role": "listitem", "class": lambda c: c and "w-dyn-item" in c})
+
+    for item in items[:10]:
+        link = item.find("a", href=True)
+        if not link:
+            continue
+        href = link.get("href", "")
+        
+        # Skip monthly metrics
+        if "monthly-metrics" in href:
+            continue
+
+        article_url = f"https://www.bullish.com{href}" if href.startswith("/") else href
+
+        title_tag = item.find("div", class_=lambda c: c and "h4-style" in c)
+        title = title_tag.get_text(strip=True) if title_tag else ""
+
+        date_tag = item.find("div", class_=lambda c: c and "date-format-2" in c)
+        date_text = date_tag.get_text(strip=True) if date_tag else ""
+        pub_date = _parse_date_text(date_text)
+
+        if pub_date:
+            pub_dt = datetime.fromisoformat(pub_date)
+            if pub_dt.tzinfo is None:
+                pub_dt = pub_dt.replace(tzinfo=timezone.utc)
+            if pub_dt < cutoff:
+                continue
+
+        row_id = insert_entry(
+            source_type="scraping",
+            source_category="institutional",
+            source_name="Bullish",
+            source_url=article_url,
+            author="Bullish",
+            title=title,
+            content="",
+            published_at=pub_date,
+        )
+        if row_id:
+            new += 1
+        else:
+            skipped += 1
+
+    logger.info(f"[Bullish] new={new} skipped={skipped}")
+    return new, skipped
+
+
+# ─── Placeholder scrapers (to be implemented after inspection) ─────────────────
+
+async def scrape_wintermute(session, cutoff): return 0, 0
+async def scrape_gsr(session, cutoff): return 0, 0
+async def scrape_falconx(session, cutoff): return 0, 0
+async def scrape_circle(session, cutoff): return 0, 0
+async def scrape_tether(session, cutoff): return 0, 0
+async def scrape_paxos(session, cutoff): return 0, 0
+async def scrape_kalshi(session, cutoff): return 0, 0
+
+
+# ─── Main ─────────────────────────────────────────────────────────────────────
+
+SCRAPERS = [
+    ("Coinbase",   scrape_coinbase),
+    ("Gemini",     scrape_gemini),
+    ("Bullish",    scrape_bullish),
+    ("Wintermute", scrape_wintermute),
+    ("GSR",        scrape_gsr),
+    ("FalconX",    scrape_falconx),
+    ("Circle",     scrape_circle),
+    ("Tether",     scrape_tether),
+    ("Paxos",      scrape_paxos),
+    ("Kalshi",     scrape_kalshi),
+]
+
+
 async def scrape_web_sources() -> dict:
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=30)  # 30 days for testing
     new_total = skip_total = 0
     errors = []
 
-    semaphore = asyncio.Semaphore(3)
-
-    async def _bounded(source):
-        async with semaphore:
-            return await scrape_source(session, source, cutoff)
-
     async with aiohttp.ClientSession() as session:
-        tasks = [_bounded(s) for s in WEB_SOURCES]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for name, func in SCRAPERS:
+            try:
+                new, skip = await func(session, cutoff)
+                new_total += new
+                skip_total += skip
+            except Exception as e:
+                msg = f"{name}: {e}"
+                logger.error(msg)
+                errors.append(msg)
+            await asyncio.sleep(1)
 
-    for source, result in zip(WEB_SOURCES, results):
-        if isinstance(result, Exception):
-            msg = f"{source['name']}: {result}"
-            logger.error(msg)
-            errors.append(msg)
-        else:
-            new, skip = result
-            new_total += new
-            skip_total += skip
-
+    logger.info(f"Web done - new={new_total} skipped={skip_total} errors={len(errors)}")
     return {"new": new_total, "skipped": skip_total, "errors": errors}
