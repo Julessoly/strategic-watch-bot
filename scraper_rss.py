@@ -28,8 +28,6 @@ RSS_FEEDS = [
     {"url": "https://multicoin.capital/rss.xml",         "name": "Multicoin",     "category": "research"},
     # News
     {"url": "https://www.theblock.co/rss.xml",           "name": "The Block",     "category": "news"},
-    {"url": "https://cointelegraph.com/rss",             "name": "Cointelegraph", "category": "news"},
-    {"url": "https://blockworks.co/feed",                "name": "Blockworks",    "category": "news"},
 ]
 
 HEADERS = {
