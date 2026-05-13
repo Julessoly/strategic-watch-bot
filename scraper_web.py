@@ -146,6 +146,8 @@ def _extract_title(html: str) -> str:
 
 def _extract_date(html: str) -> Optional[str]:
     soup = BeautifulSoup(html, "html.parser")
+
+    # 1. <time datetime="...">
     for tag in soup.find_all("time"):
         dt = tag.get("datetime", "")
         if dt:
@@ -153,14 +155,31 @@ def _extract_date(html: str) -> Optional[str]:
                 return datetime.fromisoformat(dt.replace("Z", "+00:00")).isoformat()
             except Exception:
                 pass
+
+    # 2. <meta property="article:published_time"> or name="datePublished"
     for meta in soup.find_all("meta"):
-        if meta.get("property") in ("article:published_time", "datePublished"):
+        prop = meta.get("property", "") or meta.get("name", "")
+        if prop in ("article:published_time", "datePublished", "og:article:published_time"):
             val = meta.get("content", "")
             if val:
                 try:
                     return datetime.fromisoformat(val.replace("Z", "+00:00")).isoformat()
                 except Exception:
                     pass
+
+    # 3. JSON-LD
+    import json as _json
+    for script in soup.find_all("script", type="application/ld+json"):
+        try:
+            data = _json.loads(script.string or "")
+            if isinstance(data, list):
+                data = data[0]
+            for key in ("datePublished", "dateCreated", "uploadDate"):
+                if key in data:
+                    return datetime.fromisoformat(data[key].replace("Z", "+00:00")).isoformat()
+        except Exception:
+            pass
+
     return None
 
 
@@ -186,7 +205,7 @@ async def scrape_source(session, source: dict, cutoff: datetime) -> tuple[int, i
 
     logger.debug(f"[{name}] {len(links)} links found")
 
-    for url in links[:10]:
+    for url in links[:10]:  # max 10 articles per source
         try:
             async with session.get(url, headers=HEADERS, timeout=aiohttp.ClientTimeout(total=15)) as r:
                 if r.status != 200:
