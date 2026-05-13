@@ -1,9 +1,7 @@
 """
 Strategic Watch Bot
 Schedule UTC:
-  08:00  RSS (9 sources)
-  08:15  Web scraping (11 sources)
-  08:20  API JSON (Binance + DRW)
+  08:00  RSS (35 sources — native feeds + Google News)
   08:30  Digest -> ANDREAS_CHAT_ID
   09:00  Health check -> alert if source broken
 """
@@ -18,8 +16,6 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from database import init_db, get_stats, search_entries, get_recent_entries, get_all_entries, get_last_ingested_per_source
 from scraper_rss import scrape_rss_feeds, RSS_FEEDS
-from scraper_web import scrape_web_sources
-from scraper_api import scrape_api_sources
 from digest import generate_daily_digest
 
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
@@ -41,38 +37,20 @@ async def job_rss():
     r = await scrape_rss_feeds()
     logger.info(f"RSS done - new={r['new']} skipped={r['skipped']}")
 
-async def job_web():
-    r = await scrape_web_sources()
-    logger.info(f"Web done - new={r['new']} skipped={r['skipped']}")
-
-async def job_api():
-    r = await scrape_api_sources()
-    logger.info(f"API done - new={r['new']} skipped={r['skipped']}")
-
 async def job_digest(app):
     text = generate_daily_digest(hours=24)
     await app.bot.send_message(chat_id=ANDREAS_CHAT_ID, text=text, parse_mode="Markdown", disable_web_page_preview=True)
 
 async def job_health_check(app):
-    """
-    Runs at 09:00 UTC - after the 08:00-08:20 scraping window.
-    Sends an alert if any source has not ingested anything in the last 48h.
-    """
-    all_sources = (
-        [{"name": f["name"], "type": "RSS"} for f in RSS_FEEDS] +
-        [{"name": s["name"], "type": "Web"} for s in WEB_SOURCES] +
-        [{"name": n, "type": "API"} for n in ["Binance", "DRW"]]
-    )
-
     last_ingested = get_last_ingested_per_source()
     cutoff_48h = datetime.now(timezone.utc) - timedelta(hours=48)
-
     broken = []
-    for source in all_sources:
-        name = source["name"]
+
+    for feed in RSS_FEEDS:
+        name = feed["name"]
         last = last_ingested.get(name)
         if last is None:
-            broken.append(f"Warning *{name}* ({source['type']}) - never ingested")
+            broken.append(f"⚠️ *{name}* — never ingested")
         else:
             try:
                 last_dt = datetime.fromisoformat(last)
@@ -80,13 +58,13 @@ async def job_health_check(app):
                     last_dt = last_dt.replace(tzinfo=timezone.utc)
                 if last_dt < cutoff_48h:
                     hours_ago = int((datetime.now(timezone.utc) - last_dt).total_seconds() / 3600)
-                    broken.append(f"*{name}* ({source['type']}) - last article *{hours_ago}h ago*")
+                    broken.append(f"🔴 *{name}* — last article *{hours_ago}h ago*")
             except Exception:
-                broken.append(f"Warning *{name}* ({source['type']}) - unreadable date")
+                broken.append(f"⚠️ *{name}* — unreadable date")
 
     if broken:
-        msg = "*Health Check - Broken sources*\n\n" + "\n".join(broken)
-        msg += "\n\n_Check Railway logs or run /scrape\\_rss, /scrape\\_web, /scrape\\_api manually._"
+        msg = "*Health Check — Broken sources*\n\n" + "\n".join(broken)
+        msg += "\n\n_Check Railway logs or run /scrape\\_rss manually._"
         await app.bot.send_message(chat_id=ANDREAS_CHAT_ID, text=msg, parse_mode="Markdown")
         logger.warning(f"Health check: {len(broken)} broken sources")
     else:
@@ -98,25 +76,16 @@ async def job_health_check(app):
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not is_allowed(update): return
     role = "contributor" if is_contributor(update) else "reader"
-    await update.message.reply_text(f"*Strategic Watch Bot* - {role}\n\n/ask - /digest - /recent - /stats", parse_mode="Markdown")
+    await update.message.reply_text(
+        f"*Strategic Watch Bot* — {role}\n\n/ask · /digest · /recent · /stats · /scrape\\_rss",
+        parse_mode="Markdown"
+    )
 
 async def cmd_scrape_rss(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not is_contributor(update): return await update.message.reply_text("Contributors only.")
-    msg = await update.message.reply_text("Scraping RSS (9 sources)...")
+    msg = await update.message.reply_text(f"Scraping RSS ({len(RSS_FEEDS)} sources)...")
     r = await scrape_rss_feeds()
     await msg.edit_text(f"RSS done\nNew: +{r['new']}\nSkipped: {r['skipped']}\nErrors: {len(r['errors'])}")
-
-async def cmd_scrape_web(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    if not is_contributor(update): return await update.message.reply_text("Contributors only.")
-    msg = await update.message.reply_text("Scraping web (11 sources)...")
-    r = await scrape_web_sources()
-    await msg.edit_text(f"Web done\nNew: +{r['new']}\nSkipped: {r['skipped']}\nErrors: {len(r['errors'])}")
-
-async def cmd_scrape_api(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    if not is_contributor(update): return await update.message.reply_text("Contributors only.")
-    msg = await update.message.reply_text("Scraping APIs (Binance + DRW)...")
-    r = await scrape_api_sources()
-    await msg.edit_text(f"API done\nNew: +{r['new']}\nSkipped: {r['skipped']}\nErrors: {len(r['errors'])}")
 
 async def cmd_stats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not is_allowed(update): return
@@ -142,7 +111,7 @@ async def cmd_recent(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     lines = []
     for e in entries:
         pub = (e.get("published_at") or e.get("ingested_at") or "")[:10]
-        lines.append(f"[{e['source_name']}] *{e['title'][:70]}*\n  {pub} - {e['source_url']}")
+        lines.append(f"[{e['source_name']}] *{e['title'][:70]}*\n  {pub} — {e['source_url']}")
     await update.message.reply_text("\n\n".join(lines), parse_mode="Markdown", disable_web_page_preview=True)
 
 async def cmd_ask(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -186,15 +155,13 @@ async def cmd_export(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def post_init(app):
     await app.bot.set_my_commands([
-        BotCommand("start",       "Introduction"),
-        BotCommand("digest",      "Daily digest"),
-        BotCommand("ask",         "Ask a question"),
-        BotCommand("recent",      "5 latest articles"),
-        BotCommand("stats",       "DB stats"),
-        BotCommand("scrape_rss",  "[Contributors] Scrape RSS"),
-        BotCommand("scrape_web",  "[Contributors] Scrape web"),
-        BotCommand("scrape_api",  "[Contributors] Scrape APIs"),
-        BotCommand("export",      "[Contributors] Export CSV"),
+        BotCommand("start",      "Introduction"),
+        BotCommand("digest",     "Daily digest"),
+        BotCommand("ask",        "Ask a question"),
+        BotCommand("recent",     "5 latest articles"),
+        BotCommand("stats",      "DB stats"),
+        BotCommand("scrape_rss", "[Contributors] Scrape RSS"),
+        BotCommand("export",     "[Contributors] Export CSV"),
     ])
 
 def main():
@@ -202,8 +169,6 @@ def main():
     app = Application.builder().token(TELEGRAM_TOKEN).post_init(post_init).build()
     app.add_handler(CommandHandler("start",      cmd_start))
     app.add_handler(CommandHandler("scrape_rss", cmd_scrape_rss))
-    app.add_handler(CommandHandler("scrape_web", cmd_scrape_web))
-    app.add_handler(CommandHandler("scrape_api", cmd_scrape_api))
     app.add_handler(CommandHandler("stats",      cmd_stats))
     app.add_handler(CommandHandler("digest",     cmd_digest))
     app.add_handler(CommandHandler("recent",     cmd_recent))
@@ -212,13 +177,11 @@ def main():
 
     scheduler = AsyncIOScheduler()
     scheduler.add_job(job_rss,          "cron", hour=8, minute=0)
-    scheduler.add_job(job_web,          "cron", hour=8, minute=15)
-    scheduler.add_job(job_api,          "cron", hour=8, minute=20)
     scheduler.add_job(job_digest,       "cron", hour=8, minute=30, args=[app])
     scheduler.add_job(job_health_check, "cron", hour=9, minute=0,  args=[app])
     scheduler.start()
 
-    logger.info("Bot started - RSS 08:00, Web 08:15, API 08:20, Digest 08:30, Health 09:00 UTC")
+    logger.info(f"Bot started - RSS 08:00, Digest 08:30, Health 09:00 UTC | {len(RSS_FEEDS)} RSS feeds")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
