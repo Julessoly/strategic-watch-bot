@@ -67,19 +67,19 @@ GOOGLE_NEWS_SOURCES = [
     {"site": "newsroom.paypal-corp.com/news-cryptocurrency",  "name": "PayPal",  "category": "stablecoins"},
     # Prediction
     {"site": "news.kalshi.com",            "name": "Kalshi",     "category": "prediction"},
-    {"site": "polymarket.com",             "name": "Polymarket", "category": "prediction"},
     # Research
     {"site": "paradigm.xyz/writing",       "name": "Paradigm",   "category": "research"},
 ]
 
 
 def _build_google_news_feeds() -> list[dict]:
-    """Build Google News RSS URLs with yesterday's date as after: filter."""
-    yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d")
+    """Build Google News RSS URLs with a 30-day window to maximize available articles.
+    The actual cutoff filtering is done in scrape_rss_feeds() based on the days parameter."""
+    thirty_days_ago = (datetime.now(timezone.utc) - timedelta(days=30)).strftime("%Y-%m-%d")
     feeds = []
     for s in GOOGLE_NEWS_SOURCES:
-        url = f"https://news.google.com/rss/search?q=site:{s['site']}+after:{yesterday}&hl=en-US&gl=US&ceid=US:en"
-    feeds.append({"url": url, "name": s["name"], "category": s["category"], "google_news": True})
+        url = f"https://news.google.com/rss/search?q=site:{s['site']}+after:{thirty_days_ago}&hl=en-US&gl=US&ceid=US:en"
+        feeds.append({"url": url, "name": s["name"], "category": s["category"], "google_news": True})
     return feeds
 
 
@@ -186,8 +186,8 @@ async def scrape_feed(session, feed: dict, cutoff: datetime) -> tuple[int, int]:
     return new, skipped
 
 
-async def scrape_rss_feeds() -> dict:
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+async def scrape_rss_feeds(days: int = 1) -> dict:
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     new_total = skip_total = 0
     errors = []
 
