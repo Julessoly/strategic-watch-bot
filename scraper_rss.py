@@ -51,12 +51,12 @@ GOOGLE_NEWS_SOURCES = [
     {"site": "nexo.com/blog",              "name": "Nexo",       "category": "cex", "url_filter": None},
     {"site": "bitget.com/blog",            "name": "Bitget",     "category": "cex", "url_filter": None},
     # Institutional
-    {"site": "bullish.com",    "name": "Bullish",    "category": "institutional", "url_filter": "/news"},
-    {"site": "bitgo.com",      "name": "BitGo",      "category": "institutional", "url_filter": "/blog/"},
-    {"site": "anchorage.com",  "name": "Anchorage",  "category": "institutional", "url_filter": "/blog/"},
-    {"site": "talos.com",      "name": "Talos",      "category": "institutional", "url_filter": "/insights/"},
-    {"site": "ambergroup.io",  "name": "Amber",      "category": "institutional", "url_filter": "/news/"},
-    # OTC — no specific path filter, all content is relevant
+    {"site": "bullish.com",    "name": "Bullish",    "category": "institutional", "url_filter": None},
+    {"site": "bitgo.com",      "name": "BitGo",      "category": "institutional", "url_filter": None},
+    {"site": "anchorage.com",  "name": "Anchorage",  "category": "institutional", "url_filter": None},
+    {"site": "talos.com",      "name": "Talos",      "category": "institutional", "url_filter": None},
+    {"site": "ambergroup.io",  "name": "Amber",      "category": "institutional", "url_filter": None},
+    # OTC
     {"site": "gsr.io",         "name": "GSR",        "category": "otc",           "url_filter": None},
     {"site": "falconx.io",     "name": "FalconX",    "category": "otc",           "url_filter": None},
     {"site": "wintermute.com", "name": "Wintermute", "category": "otc",           "url_filter": None},
@@ -65,12 +65,12 @@ GOOGLE_NEWS_SOURCES = [
     {"site": "galaxy.com",     "name": "Galaxy",     "category": "otc",           "url_filter": None},
     {"site": "b2c2.com",       "name": "B2C2",       "category": "otc",           "url_filter": None},
     # Stablecoins
-    {"site": "circle.com",     "name": "Circle",     "category": "stablecoins",   "url_filter": "/blog/"},
-    {"site": "tether.io",      "name": "Tether",     "category": "stablecoins",   "url_filter": "/news/"},
-    {"site": "paxos.com",      "name": "Paxos",      "category": "stablecoins",   "url_filter": "/blog/"},
-    {"site": "ripple.com",     "name": "Ripple",     "category": "stablecoins",   "url_filter": "/insights/"},
+    {"site": "circle.com",     "name": "Circle",     "category": "stablecoins",   "url_filter": None},
+    {"site": "tether.io",      "name": "Tether",     "category": "stablecoins",   "url_filter": None},
+    {"site": "paxos.com",      "name": "Paxos",      "category": "stablecoins",   "url_filter": None},
+    {"site": "ripple.com",     "name": "Ripple",     "category": "stablecoins",   "url_filter": None},
     # Research
-    {"site": "paradigm.xyz",   "name": "Paradigm",   "category": "research",      "url_filter": "/writing/"},
+    {"site": "paradigm.xyz",   "name": "Paradigm",   "category": "research",      "url_filter": None},
 ]
 
 
