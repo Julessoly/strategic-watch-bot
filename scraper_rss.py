@@ -1,6 +1,6 @@
 """
 RSS scraper — native feeds + Google News RSS for everything else.
-Always fetches full article content via trafilatura.
+Google News URLs include a dynamic after: filter (yesterday) to avoid old articles.
 """
 
 import logging
@@ -20,63 +20,73 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36"
 }
 
-GN = "https://news.google.com/rss/search?q=site:{site}&hl=en-US&gl=US&ceid=US:en"
-
-RSS_FEEDS = [
-    # ── CEX — Native RSS ──────────────────────────────────────────────────────
-    {"url": "https://blog.kraken.com/feed",         "name": "Kraken",     "category": "cex"},
-    {"url": "https://blog.bitfinex.com/feed",       "name": "Bitfinex",   "category": "cex"},
-    {"url": "https://blog.bitmex.com/feed/",        "name": "BitMEX",     "category": "cex"},
-
-    # ── CEX — Google News ─────────────────────────────────────────────────────
-    {"url": GN.format(site="coinbase.com/blog"),         "name": "Coinbase",   "category": "cex"},
-    {"url": GN.format(site="gemini.com/blog"),           "name": "Gemini",     "category": "cex"},
-    {"url": GN.format(site="binance.com/en/blog"),       "name": "Binance",    "category": "cex"},
-    {"url": GN.format(site="okx.com/learn"),             "name": "OKX",        "category": "cex"},
-    {"url": GN.format(site="crypto.com/en/company-news"),"name": "Crypto.com", "category": "cex"},
-    {"url": GN.format(site="bitstamp.net/blog"),         "name": "Bitstamp",   "category": "cex"},
-
-    # ── Institutional — Native RSS ────────────────────────────────────────────
-    {"url": "https://www.fireblocks.com/blog/feed", "name": "Fireblocks", "category": "institutional"},
-
-    # ── Institutional — Google News ───────────────────────────────────────────
-    {"url": GN.format(site="bullish.com/news-insights"),  "name": "Bullish",    "category": "institutional"},
-    {"url": GN.format(site="bitgo.com/blog"),             "name": "BitGo",      "category": "institutional"},
-    {"url": GN.format(site="anchorage.com/blog"),         "name": "Anchorage",  "category": "institutional"},
-    {"url": GN.format(site="talos.com/insights"),         "name": "Talos",      "category": "institutional"},
-    {"url": GN.format(site="ambergroup.io/news"),         "name": "Amber",      "category": "institutional"},
-
-    # ── OTC — Google News ─────────────────────────────────────────────────────
-    {"url": GN.format(site="gsr.io/insights"),            "name": "GSR",        "category": "otc"},
-    {"url": GN.format(site="falconx.io/newsroom"),        "name": "FalconX",    "category": "otc"},
-    {"url": GN.format(site="wintermute.com/insights"),    "name": "Wintermute", "category": "otc"},
-    {"url": GN.format(site="drw.com/updates"),            "name": "DRW",        "category": "otc"},
-    {"url": GN.format(site="flowdesk.co/insights"),       "name": "Flowdesk",   "category": "otc"},
-    {"url": GN.format(site="galaxy.com/newsroom"),        "name": "Galaxy",     "category": "otc"},
-    {"url": GN.format(site="b2c2.com/news"),              "name": "B2C2",       "category": "otc"},
-
-    # ── Stablecoins — Google News ─────────────────────────────────────────────
-    {"url": GN.format(site="circle.com/pressroom"),           "name": "Circle",  "category": "stablecoins"},
-    {"url": GN.format(site="tether.io/news"),                 "name": "Tether",  "category": "stablecoins"},
-    {"url": GN.format(site="paxos.com/newsroom"),             "name": "Paxos",   "category": "stablecoins"},
-    {"url": GN.format(site="ripple.com/press-releases"),      "name": "Ripple",  "category": "stablecoins"},
-    {"url": GN.format(site="newsroom.paypal-corp.com/news-cryptocurrency"), "name": "PayPal", "category": "stablecoins"},
-
-    # ── Prediction — Google News ──────────────────────────────────────────────
-    {"url": GN.format(site="news.kalshi.com"),             "name": "Kalshi",     "category": "prediction"},
-    {"url": GN.format(site="polymarket.com"),              "name": "Polymarket", "category": "prediction"},
-
-    # ── Research — Native RSS ─────────────────────────────────────────────────
-    {"url": "https://a16zcrypto.substack.com/feed",  "name": "a16z Crypto", "category": "research"},
-    {"url": "https://multicoin.capital/rss.xml",     "name": "Multicoin",   "category": "research"},
-
-    # ── Research — Google News ────────────────────────────────────────────────
-    {"url": GN.format(site="paradigm.xyz/writing"),       "name": "Paradigm",   "category": "research"},
-
-    # ── News — Native RSS ─────────────────────────────────────────────────────
-    {"url": "https://www.theblock.co/rss.xml",       "name": "The Block",   "category": "news"},
-    {"url": "https://blockworks.co/feed",            "name": "Blockworks",  "category": "news"},
+# Static native RSS feeds
+NATIVE_FEEDS = [
+    # CEX
+    {"url": "https://blog.kraken.com/feed",         "name": "Kraken",      "category": "cex"},
+    {"url": "https://blog.bitfinex.com/feed",       "name": "Bitfinex",    "category": "cex"},
+    {"url": "https://blog.bitmex.com/feed/",        "name": "BitMEX",      "category": "cex"},
+    # Institutional
+    {"url": "https://www.fireblocks.com/blog/feed", "name": "Fireblocks",  "category": "institutional"},
+    # Research
+    {"url": "https://a16zcrypto.substack.com/feed", "name": "a16z Crypto", "category": "research"},
+    {"url": "https://multicoin.capital/rss.xml",    "name": "Multicoin",   "category": "research"},
+    # News
+    {"url": "https://www.theblock.co/rss.xml",      "name": "The Block",   "category": "news"},
+    {"url": "https://blockworks.co/feed",           "name": "Blockworks",  "category": "news"},
 ]
+
+# Google News sources — URLs built dynamically at runtime with after: filter
+GOOGLE_NEWS_SOURCES = [
+    # CEX
+    {"site": "coinbase.com/blog",          "name": "Coinbase",   "category": "cex"},
+    {"site": "gemini.com/blog",            "name": "Gemini",     "category": "cex"},
+    {"site": "binance.com/en/blog",        "name": "Binance",    "category": "cex"},
+    {"site": "okx.com/learn",              "name": "OKX",        "category": "cex"},
+    {"site": "crypto.com/en/company-news", "name": "Crypto.com", "category": "cex"},
+    {"site": "bitstamp.net/blog",          "name": "Bitstamp",   "category": "cex"},
+    # Institutional
+    {"site": "bullish.com/news-insights",  "name": "Bullish",    "category": "institutional"},
+    {"site": "bitgo.com/blog",             "name": "BitGo",      "category": "institutional"},
+    {"site": "anchorage.com/blog",         "name": "Anchorage",  "category": "institutional"},
+    {"site": "talos.com/insights",         "name": "Talos",      "category": "institutional"},
+    {"site": "ambergroup.io/news",         "name": "Amber",      "category": "institutional"},
+    # OTC
+    {"site": "gsr.io/insights",            "name": "GSR",        "category": "otc"},
+    {"site": "falconx.io/newsroom",        "name": "FalconX",    "category": "otc"},
+    {"site": "wintermute.com/insights",    "name": "Wintermute", "category": "otc"},
+    {"site": "drw.com/updates",            "name": "DRW",        "category": "otc"},
+    {"site": "flowdesk.co/insights",       "name": "Flowdesk",   "category": "otc"},
+    {"site": "galaxy.com/newsroom",        "name": "Galaxy",     "category": "otc"},
+    {"site": "b2c2.com/news",              "name": "B2C2",       "category": "otc"},
+    # Stablecoins
+    {"site": "circle.com/pressroom",                         "name": "Circle",  "category": "stablecoins"},
+    {"site": "tether.io/news",                               "name": "Tether",  "category": "stablecoins"},
+    {"site": "paxos.com/newsroom",                           "name": "Paxos",   "category": "stablecoins"},
+    {"site": "ripple.com/press-releases",                    "name": "Ripple",  "category": "stablecoins"},
+    {"site": "newsroom.paypal-corp.com/news-cryptocurrency", "name": "PayPal",  "category": "stablecoins"},
+    # Prediction
+    {"site": "news.kalshi.com",            "name": "Kalshi",     "category": "prediction"},
+    {"site": "polymarket.com",             "name": "Polymarket", "category": "prediction"},
+    # Research
+    {"site": "paradigm.xyz/writing",       "name": "Paradigm",   "category": "research"},
+]
+
+
+def _build_google_news_feeds() -> list[dict]:
+    yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d")
+    feeds = []
+    for s in GOOGLE_NEWS_SOURCES:
+        url = f"https://news.google.com/rss/search?q=site:{s['site']}+after:{yesterday}&hl=en-US&gl=US&ceid=US:en"
+        feeds.append({"url": url, "name": s["name"], "category": s["category"]})
+    return feeds
+
+
+def get_all_feeds() -> list[dict]:
+    return NATIVE_FEEDS + _build_google_news_feeds()
+
+
+RSS_FEEDS = NATIVE_FEEDS + [{"name": s["name"], "url": "", "category": s["category"]} for s in GOOGLE_NEWS_SOURCES]
 
 
 def _parse_date(entry) -> Optional[str]:
@@ -126,7 +136,7 @@ async def scrape_feed(session, feed: dict, cutoff: datetime) -> tuple[int, int]:
 
     parsed = feedparser.parse(raw)
     if not parsed.entries:
-        logger.warning(f"[{name}] 0 entries")
+        logger.debug(f"[{name}] 0 entries")
         return 0, 0
 
     for entry in parsed.entries:
@@ -175,8 +185,10 @@ async def scrape_rss_feeds() -> dict:
     new_total = skip_total = 0
     errors = []
 
+    feeds = get_all_feeds()
+
     async with aiohttp.ClientSession() as session:
-        for feed in RSS_FEEDS:
+        for feed in feeds:
             try:
                 new, skip = await scrape_feed(session, feed, cutoff)
                 new_total += new
