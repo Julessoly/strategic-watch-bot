@@ -60,11 +60,11 @@ GOOGLE_NEWS_SOURCES = [
     {"site": "galaxy.com/newsroom",        "name": "Galaxy",     "category": "otc"},
     {"site": "b2c2.com/news",              "name": "B2C2",       "category": "otc"},
     # Stablecoins
-    {"site": "circle.com/pressroom",                         "name": "Circle",  "category": "stablecoins"},
-    {"site": "tether.io/news",                               "name": "Tether",  "category": "stablecoins"},
-    {"site": "paxos.com/newsroom",                           "name": "Paxos",   "category": "stablecoins"},
-    {"site": "ripple.com/press-releases",                    "name": "Ripple",  "category": "stablecoins"},
-    {"site": "newsroom.paypal-corp.com/news-cryptocurrency", "name": "PayPal",  "category": "stablecoins"},
+    {"site": "circle.com/pressroom",                          "name": "Circle",  "category": "stablecoins"},
+    {"site": "tether.io/news",                                "name": "Tether",  "category": "stablecoins"},
+    {"site": "paxos.com/newsroom",                            "name": "Paxos",   "category": "stablecoins"},
+    {"site": "ripple.com/press-releases",                     "name": "Ripple",  "category": "stablecoins"},
+    {"site": "newsroom.paypal-corp.com/news-cryptocurrency",  "name": "PayPal",  "category": "stablecoins"},
     # Prediction
     {"site": "news.kalshi.com",            "name": "Kalshi",     "category": "prediction"},
     {"site": "polymarket.com",             "name": "Polymarket", "category": "prediction"},
@@ -74,11 +74,12 @@ GOOGLE_NEWS_SOURCES = [
 
 
 def _build_google_news_feeds() -> list[dict]:
+    """Build Google News RSS URLs with yesterday's date as after: filter."""
     yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d")
     feeds = []
     for s in GOOGLE_NEWS_SOURCES:
         url = f"https://news.google.com/rss/search?q=site:{s['site']}+after:{yesterday}&hl=en-US&gl=US&ceid=US:en"
-        feeds.append({"url": url, "name": s["name"], "category": s["category"]})
+    feeds.append({"url": url, "name": s["name"], "category": s["category"], "google_news": True})
     return feeds
 
 
@@ -86,6 +87,7 @@ def get_all_feeds() -> list[dict]:
     return NATIVE_FEEDS + _build_google_news_feeds()
 
 
+# RSS_FEEDS exposed for health check in bot.py
 RSS_FEEDS = NATIVE_FEEDS + [{"name": s["name"], "url": "", "category": s["category"]} for s in GOOGLE_NEWS_SOURCES]
 
 
@@ -154,11 +156,15 @@ async def scrape_feed(session, feed: dict, cutoff: datetime) -> tuple[int, int]:
 
         title = entry.get("title", "").strip()
 
-        content = await _fetch_article(session, article_url)
-        if not content:
-            raw_summary = entry.get("summary", "") or ""
-            content = _strip_html(raw_summary) if raw_summary else ""
-        content = content[:4000]
+        # Only fetch full content for native RSS feeds, not Google News
+        if feed.get("google_news"):
+            content = ""
+        else:
+            content = await _fetch_article(session, article_url)
+            if not content:
+                raw_summary = entry.get("summary", "") or ""
+                content = _strip_html(raw_summary) if raw_summary else ""
+            content = content[:4000]
 
         row_id = insert_entry(
             source_type="rss",
@@ -185,7 +191,7 @@ async def scrape_rss_feeds() -> dict:
     new_total = skip_total = 0
     errors = []
 
-    feeds = get_all_feeds()
+    feeds = get_all_feeds()  # URLs built fresh at runtime with today's date
 
     async with aiohttp.ClientSession() as session:
         for feed in feeds:
