@@ -1,7 +1,7 @@
 """
 Strategic Watch Bot
 Schedule UTC:
-  08:00  RSS (35 sources — native feeds + Google News)
+  08:00  RSS (34 sources — native feeds + Google News)
   08:30  Digest -> ANDREAS_CHAT_ID
   09:00  Health check -> alert if source broken
 """
@@ -34,7 +34,7 @@ def is_contributor(u): return u.effective_user and u.effective_user.id in CONTRI
 # --- Scheduled jobs ---
 
 async def job_rss():
-    r = await scrape_rss_feeds()
+    r = await scrape_rss_feeds(days=1)
     logger.info(f"RSS done - new={r['new']} skipped={r['skipped']}")
 
 async def job_digest(app):
@@ -83,8 +83,14 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def cmd_scrape_rss(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not is_contributor(update): return await update.message.reply_text("Contributors only.")
-    msg = await update.message.reply_text(f"Scraping RSS ({len(RSS_FEEDS)} sources)...")
-    r = await scrape_rss_feeds()
+    days = 1
+    if ctx.args:
+        try:
+            days = max(1, min(int(ctx.args[0]), 30))
+        except ValueError:
+            return await update.message.reply_text("Usage: /scrape_rss [days] — e.g. /scrape_rss 7")
+    msg = await update.message.reply_text(f"Scraping RSS ({len(RSS_FEEDS)} sources, last {days}d)...")
+    r = await scrape_rss_feeds(days=days)
     await msg.edit_text(f"RSS done\nNew: +{r['new']}\nSkipped: {r['skipped']}\nErrors: {len(r['errors'])}")
 
 async def cmd_stats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
