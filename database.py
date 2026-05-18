@@ -1,6 +1,12 @@
 """
 Database module - SQLite local on /data/watch.db (Railway persistent volume).
 Single table: entries (UNIQUE on source_url for automatic deduplication).
+
+Schema:
+- source_type removed
+- source_description: "media" or "company" to distinguish news outlets from company blogs
+- tags: AI-enriched comma-separated tags (e.g. "partnership,product_launch,regulatory")
+  NULL = not yet enriched / DELETE = noise (removed by enrichment step)
 """
 
 import os
@@ -27,8 +33,8 @@ def init_db():
     conn.execute("""
         CREATE TABLE IF NOT EXISTS entries (
             id                    INTEGER PRIMARY KEY AUTOINCREMENT,
-            source_type           TEXT NOT NULL,
             source_category       TEXT NOT NULL,
+            source_description    TEXT,
             source_name           TEXT NOT NULL,
             source_url            TEXT NOT NULL UNIQUE,
             author                TEXT,
@@ -36,6 +42,7 @@ def init_db():
             content               TEXT,
             published_at          TEXT,
             ingested_at           TEXT NOT NULL DEFAULT (datetime('now')),
+            tags                  TEXT,
             raise_amount_usd      REAL,
             raise_round           TEXT,
             raise_category        TEXT,
@@ -45,16 +52,74 @@ def init_db():
             raise_valuation_usd   REAL
         )
     """)
+    # Migrations: add new columns if DB already exists
+    for col, definition in [
+        ("source_description", "TEXT"),
+        ("tags",               "TEXT"),
+    ]:
+        try:
+            conn.execute(f"ALTER TABLE entries ADD COLUMN {col} {definition}")
+            logger.info(f"Migration: added column {col}")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
+    # Migration: drop source_type and is_relevant if still present
+    try:
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(entries)").fetchall()]
+        if "source_type" in cols or "is_relevant" in cols:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS entries_new (
+                    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+                    source_category       TEXT NOT NULL,
+                    source_description    TEXT,
+                    source_name           TEXT NOT NULL,
+                    source_url            TEXT NOT NULL UNIQUE,
+                    author                TEXT,
+                    title                 TEXT,
+                    content               TEXT,
+                    published_at          TEXT,
+                    ingested_at           TEXT NOT NULL DEFAULT (datetime('now')),
+                    tags                  TEXT,
+                    raise_amount_usd      REAL,
+                    raise_round           TEXT,
+                    raise_category        TEXT,
+                    raise_description     TEXT,
+                    raise_lead_investor   TEXT,
+                    raise_other_investors TEXT,
+                    raise_valuation_usd   REAL
+                )
+            """)
+            conn.execute("""
+                INSERT INTO entries_new (
+                    id, source_category, source_name, source_url,
+                    author, title, content, published_at, ingested_at,
+                    tags, raise_amount_usd, raise_round, raise_category, raise_description,
+                    raise_lead_investor, raise_other_investors, raise_valuation_usd
+                )
+                SELECT
+                    id, source_category, source_name, source_url,
+                    author, title, content, published_at, ingested_at,
+                    NULL,
+                    raise_amount_usd, raise_round, raise_category, raise_description,
+                    raise_lead_investor, raise_other_investors, raise_valuation_usd
+                FROM entries
+            """)
+            conn.execute("DROP TABLE entries")
+            conn.execute("ALTER TABLE entries_new RENAME TO entries")
+            logger.info("Migration: removed source_type and is_relevant columns")
+    except Exception as e:
+        logger.error(f"Migration error: {e}")
+
     conn.commit()
     conn.close()
     logger.info(f"DB initialized at {DB_PATH}")
 
 
 def insert_entry(
-    source_type: str,
     source_category: str,
     source_name: str,
     source_url: str,
+    source_description: Optional[str] = None,
     author: str = "",
     title: str = "",
     content: str = "",
@@ -72,14 +137,14 @@ def insert_entry(
         cursor = conn.execute(
             """
             INSERT INTO entries (
-                source_type, source_category, source_name, source_url,
+                source_category, source_description, source_name, source_url,
                 author, title, content, published_at, ingested_at,
                 raise_amount_usd, raise_round, raise_category, raise_description,
                 raise_lead_investor, raise_other_investors, raise_valuation_usd
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                source_type, source_category, source_name, source_url,
+                source_category, source_description, source_name, source_url,
                 author, title, content, published_at,
                 raise_amount_usd, raise_round, raise_category, raise_description,
                 raise_lead_investor,
@@ -98,19 +163,61 @@ def insert_entry(
         conn.close()
 
 
+def update_tags(entry_id: int, tags: str) -> bool:
+    """Set AI-enriched tags on a relevant entry."""
+    conn = get_conn()
+    try:
+        conn.execute("UPDATE entries SET tags = ? WHERE id = ?", (tags, entry_id))
+        conn.commit()
+        return True
+    except Exception as e:
+        logger.error(f"DB update_tags error [{entry_id}]: {e}")
+        return False
+    finally:
+        conn.close()
+
+
+def delete_entry(entry_id: int) -> bool:
+    """Delete a noise entry identified by AI enrichment."""
+    conn = get_conn()
+    try:
+        conn.execute("DELETE FROM entries WHERE id = ?", (entry_id,))
+        conn.commit()
+        return True
+    except Exception as e:
+        logger.error(f"DB delete error [{entry_id}]: {e}")
+        return False
+    finally:
+        conn.close()
+
+
+def get_unenriched_entries(limit: int = 100) -> list[dict]:
+    """Return entries that haven't been through AI enrichment yet (tags IS NULL)."""
+    conn = get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM entries WHERE tags IS NULL ORDER BY ingested_at DESC LIMIT ?",
+            (limit,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
 def get_recent_entries(hours: int = 24, limit: int = 200, source_category: Optional[str] = None) -> list[dict]:
     conn = get_conn()
     try:
+        filters = ["ingested_at >= datetime('now', ?)"]
+        params = [f"-{hours} hours"]
         if source_category:
-            rows = conn.execute(
-                "SELECT * FROM entries WHERE ingested_at >= datetime('now', ?) AND source_category = ? ORDER BY ingested_at DESC LIMIT ?",
-                (f"-{hours} hours", source_category, limit)
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                "SELECT * FROM entries WHERE ingested_at >= datetime('now', ?) ORDER BY ingested_at DESC LIMIT ?",
-                (f"-{hours} hours", limit)
-            ).fetchall()
+            filters.append("source_category = ?")
+            params.append(source_category)
+        where = " AND ".join(filters)
+        params.append(limit)
+        rows = conn.execute(
+            f"SELECT * FROM entries WHERE {where} ORDER BY ingested_at DESC LIMIT ?",
+            params
+        ).fetchall()
         return [dict(r) for r in rows]
     finally:
         conn.close()
@@ -145,12 +252,13 @@ def get_stats() -> dict:
     try:
         total       = conn.execute("SELECT COUNT(*) FROM entries").fetchone()[0]
         by_category = conn.execute("SELECT source_category, COUNT(*) FROM entries GROUP BY source_category").fetchall()
-        by_type     = conn.execute("SELECT source_type, COUNT(*) FROM entries GROUP BY source_type").fetchall()
+        enriched    = conn.execute("SELECT COUNT(*) FROM entries WHERE tags IS NOT NULL").fetchone()[0]
         last        = conn.execute("SELECT ingested_at FROM entries ORDER BY ingested_at DESC LIMIT 1").fetchone()
         return {
             "total":         total,
             "by_category":   {row[0] or "unknown": row[1] for row in by_category},
-            "by_type":       {row[0]: row[1] for row in by_type},
+            "enriched":      enriched,
+            "pending":       total - enriched,
             "last_ingested": (last[0] or "")[:19] if last else "N/A",
         }
     finally:
