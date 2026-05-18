@@ -1,287 +1,85 @@
 """
-Database module - SQLite local on /data/watch.db (Railway persistent volume).
-Single table: entries (UNIQUE on source_url for automatic deduplication).
-
-Schema:
-- source_type removed
-- source_description: "media" or "company" to distinguish news outlets from company blogs
-- tags: AI-enriched comma-separated tags (e.g. "partnership,product_launch,regulatory")
-  NULL = not yet enriched / DELETE = noise (removed by enrichment step)
+Daily digest generator.
+Pulls recent entries from the last 24h and asks Claude to synthesise
+a strategic memo for Andreas.
+Company blogs are prioritised over media sources.
 """
-
 import os
-import json
-import sqlite3
 import logging
-from datetime import datetime
-from typing import Optional
+from anthropic import Anthropic
+from database import get_recent_entries_by_published
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = os.environ.get("DB_PATH", "/data/watch.db")
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+MODEL = "claude-sonnet-4-20250514"
 
 
-def get_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+def generate_daily_digest(hours: int = 24) -> str:
+    entries = get_recent_entries_by_published(hours=hours, limit=150)
+    if not entries:
+        return f"No entries in the last {hours}h."
 
+    # Split company blogs vs media
+    company_entries = [e for e in entries if e.get("source_description") in ("company", "research")]
+    media_entries   = [e for e in entries if e.get("source_description") == "media"]
 
-def init_db():
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    conn = get_conn()
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS entries (
-            id                    INTEGER PRIMARY KEY AUTOINCREMENT,
-            source_category       TEXT NOT NULL,
-            source_description    TEXT,
-            source_name           TEXT NOT NULL,
-            source_url            TEXT NOT NULL UNIQUE,
-            author                TEXT,
-            title                 TEXT,
-            content               TEXT,
-            published_at          TEXT,
-            ingested_at           TEXT NOT NULL DEFAULT (datetime('now')),
-            tags                  TEXT,
-            raise_amount_usd      REAL,
-            raise_round           TEXT,
-            raise_category        TEXT,
-            raise_description     TEXT,
-            raise_lead_investor   TEXT,
-            raise_other_investors TEXT,
-            raise_valuation_usd   REAL
-        )
-    """)
-    # Migrations: add new columns if DB already exists
-    for col, definition in [
-        ("source_description", "TEXT"),
-        ("tags",               "TEXT"),
-    ]:
-        try:
-            conn.execute(f"ALTER TABLE entries ADD COLUMN {col} {definition}")
-            logger.info(f"Migration: added column {col}")
-        except sqlite3.OperationalError:
-            pass  # Column already exists
+    def format_entry(e, content_limit=500):
+        source  = e.get("source_name", "?")
+        title   = e.get("title", "")
+        content = (e.get("content") or "")[:content_limit]
+        pub     = (e.get("published_at") or "")[:10]
+        tags    = e.get("tags", "")
+        return f"[{source} | {pub} | {tags}]\n{title}\n{content}"
 
-    # Migration: drop source_type and is_relevant if still present
-    try:
-        cols = [r[1] for r in conn.execute("PRAGMA table_info(entries)").fetchall()]
-        if "source_type" in cols or "is_relevant" in cols:
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS entries_new (
-                    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
-                    source_category       TEXT NOT NULL,
-                    source_description    TEXT,
-                    source_name           TEXT NOT NULL,
-                    source_url            TEXT NOT NULL UNIQUE,
-                    author                TEXT,
-                    title                 TEXT,
-                    content               TEXT,
-                    published_at          TEXT,
-                    ingested_at           TEXT NOT NULL DEFAULT (datetime('now')),
-                    tags                  TEXT,
-                    raise_amount_usd      REAL,
-                    raise_round           TEXT,
-                    raise_category        TEXT,
-                    raise_description     TEXT,
-                    raise_lead_investor   TEXT,
-                    raise_other_investors TEXT,
-                    raise_valuation_usd   REAL
-                )
-            """)
-            conn.execute("""
-                INSERT INTO entries_new (
-                    id, source_category, source_name, source_url,
-                    author, title, content, published_at, ingested_at,
-                    tags, raise_amount_usd, raise_round, raise_category, raise_description,
-                    raise_lead_investor, raise_other_investors, raise_valuation_usd
-                )
-                SELECT
-                    id, source_category, source_name, source_url,
-                    author, title, content, published_at, ingested_at,
-                    NULL,
-                    raise_amount_usd, raise_round, raise_category, raise_description,
-                    raise_lead_investor, raise_other_investors, raise_valuation_usd
-                FROM entries
-            """)
-            conn.execute("DROP TABLE entries")
-            conn.execute("ALTER TABLE entries_new RENAME TO entries")
-            logger.info("Migration: removed source_type and is_relevant columns")
-    except Exception as e:
-        logger.error(f"Migration error: {e}")
+    # Company blogs: all articles, full content
+    company_block = "\n\n---\n\n".join(format_entry(e, 600) for e in company_entries)
 
-    conn.commit()
-    conn.close()
-    logger.info(f"DB initialized at {DB_PATH}")
+    # Media: cap at 15 articles to avoid drowning company news
+    media_block = "\n\n---\n\n".join(format_entry(e, 400) for e in media_entries[:15])
 
+    label = f"last {hours}h"
 
-def insert_entry(
-    source_category: str,
-    source_name: str,
-    source_url: str,
-    source_description: Optional[str] = None,
-    author: str = "",
-    title: str = "",
-    content: str = "",
-    published_at: Optional[str] = None,
-    raise_amount_usd: Optional[float] = None,
-    raise_round: Optional[str] = None,
-    raise_category: Optional[str] = None,
-    raise_description: Optional[str] = None,
-    raise_lead_investor: Optional[str] = None,
-    raise_other_investors: Optional[list] = None,
-    raise_valuation_usd: Optional[float] = None,
-) -> Optional[int]:
-    conn = get_conn()
-    try:
-        cursor = conn.execute(
-            """
-            INSERT INTO entries (
-                source_category, source_description, source_name, source_url,
-                author, title, content, published_at, ingested_at,
-                raise_amount_usd, raise_round, raise_category, raise_description,
-                raise_lead_investor, raise_other_investors, raise_valuation_usd
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                source_category, source_description, source_name, source_url,
-                author, title, content, published_at,
-                raise_amount_usd, raise_round, raise_category, raise_description,
-                raise_lead_investor,
-                json.dumps(raise_other_investors) if raise_other_investors else None,
-                raise_valuation_usd,
-            )
-        )
-        conn.commit()
-        return cursor.lastrowid
-    except sqlite3.IntegrityError:
-        return None  # Duplicate URL - silently skip
-    except Exception as e:
-        logger.error(f"DB insert error [{source_url}]: {e}")
-        return None
-    finally:
-        conn.close()
+    prompt = f"""Here are today's strategic watch entries ({label}).
 
+=== COMPANY & RESEARCH BLOGS (PRIMARY SOURCE — prioritise these) ===
+These are direct announcements from crypto companies (competitors, partners, ecosystem players).
+They represent what companies are actually doing and should drive most of the memo.
 
-def reset_untagged() -> int:
-    """Reset entries with tags='untagged' back to NULL so they get re-processed."""
-    conn = get_conn()
-    try:
-        cursor = conn.execute("UPDATE entries SET tags = NULL WHERE tags = 'untagged'")
-        conn.commit()
-        return cursor.rowcount
-    finally:
-        conn.close()
+{company_block if company_block else "No company articles today."}
 
+=== INDUSTRY NEWS — The Block (SECONDARY SOURCE — complement only) ===
+Use these to add market context, regulatory news, or macro events not covered by company blogs.
+Do not let these dominate the memo.
 
-def update_tags(entry_id: int, tags: str) -> bool:
-    """Set AI-enriched tags on a relevant entry."""
-    conn = get_conn()
-    try:
-        conn.execute("UPDATE entries SET tags = ? WHERE id = ?", (tags, entry_id))
-        conn.commit()
-        return True
-    except Exception as e:
-        logger.error(f"DB update_tags error [{entry_id}]: {e}")
-        return False
-    finally:
-        conn.close()
+{media_block if media_block else "No media articles today."}
 
+---
+Write a strategic intelligence memo following the format guidelines."""
 
-def delete_entry(entry_id: int) -> bool:
-    """Delete a noise entry identified by AI enrichment."""
-    conn = get_conn()
-    try:
-        conn.execute("DELETE FROM entries WHERE id = ?", (entry_id,))
-        conn.commit()
-        return True
-    except Exception as e:
-        logger.error(f"DB delete error [{entry_id}]: {e}")
-        return False
-    finally:
-        conn.close()
+    client = Anthropic(api_key=ANTHROPIC_API_KEY)
+    response = client.messages.create(
+        model=MODEL,
+        max_tokens=1500,
+        system="""You are a strategic analyst for Blockchain.com, a crypto company with retail exchange, institutional OTC, custody, staking, and prime brokerage products.
+Your job is to write a daily intelligence memo for the leadership team. Rules:
+- Write like a smart colleague summarising the day's news in a Slack message, not a consulting report
+- Short sentences. Plain English. No buzzwords, no "leverage", no "ecosystem", no "space"
+- Concrete facts only: company names, numbers, dates. No vague statements
+- If something is important for Blockchain.com, say WHY in one plain sentence
+- Do not invent or extrapolate facts not present in the source material""",
+        messages=[{
+            "role": "user",
+            "content": f"""{prompt}
 
-
-def get_unenriched_entries(limit: int = 100) -> list[dict]:
-    """Return entries that haven't been through AI enrichment yet (tags IS NULL)."""
-    conn = get_conn()
-    try:
-        rows = conn.execute(
-            "SELECT * FROM entries WHERE tags IS NULL ORDER BY ingested_at DESC LIMIT ?",
-            (limit,)
-        ).fetchall()
-        return [dict(r) for r in rows]
-    finally:
-        conn.close()
-
-
-def get_recent_entries(hours: int = 24, limit: int = 200, source_category: Optional[str] = None) -> list[dict]:
-    conn = get_conn()
-    try:
-        filters = ["ingested_at >= datetime('now', ?)"]
-        params = [f"-{hours} hours"]
-        if source_category:
-            filters.append("source_category = ?")
-            params.append(source_category)
-        where = " AND ".join(filters)
-        params.append(limit)
-        rows = conn.execute(
-            f"SELECT * FROM entries WHERE {where} ORDER BY ingested_at DESC LIMIT ?",
-            params
-        ).fetchall()
-        return [dict(r) for r in rows]
-    finally:
-        conn.close()
-
-
-def search_entries(query: str, limit: int = 20) -> list[dict]:
-    conn = get_conn()
-    try:
-        like = f"%{query}%"
-        rows = conn.execute(
-            "SELECT * FROM entries WHERE title LIKE ? OR content LIKE ? ORDER BY ingested_at DESC LIMIT ?",
-            (like, like, limit)
-        ).fetchall()
-        return [dict(r) for r in rows]
-    finally:
-        conn.close()
-
-
-def get_all_entries(limit: int = 2000) -> list[dict]:
-    conn = get_conn()
-    try:
-        rows = conn.execute(
-            "SELECT * FROM entries ORDER BY ingested_at DESC LIMIT ?", (limit,)
-        ).fetchall()
-        return [dict(r) for r in rows]
-    finally:
-        conn.close()
-
-
-def get_stats() -> dict:
-    conn = get_conn()
-    try:
-        total       = conn.execute("SELECT COUNT(*) FROM entries").fetchone()[0]
-        by_category = conn.execute("SELECT source_category, COUNT(*) FROM entries GROUP BY source_category").fetchall()
-        enriched    = conn.execute("SELECT COUNT(*) FROM entries WHERE tags IS NOT NULL").fetchone()[0]
-        last        = conn.execute("SELECT ingested_at FROM entries ORDER BY ingested_at DESC LIMIT 1").fetchone()
-        return {
-            "total":         total,
-            "by_category":   {row[0] or "unknown": row[1] for row in by_category},
-            "enriched":      enriched,
-            "pending":       total - enriched,
-            "last_ingested": (last[0] or "")[:19] if last else "N/A",
-        }
-    finally:
-        conn.close()
-
-
-def get_last_ingested_per_source() -> dict:
-    conn = get_conn()
-    try:
-        rows = conn.execute(
-            "SELECT source_name, MAX(ingested_at) FROM entries GROUP BY source_name"
-        ).fetchall()
-        return {row[0]: row[1] for row in rows}
-    finally:
-        conn.close()
+Format guidelines:
+- Start with the header: 📊 *STRATEGIC WATCH — {label.upper()}*
+- Group bullets under 2-4 dynamic section titles with relevant emojis. Section titles must be **bold** with a relevant emoji, formatted exactly like this: **🏦 Institutional Moves**. Choose titles based on what actually happened today — don't use fixed categories.
+- Each bullet = just the fact (company, number, event). One sentence, no context sentence after each bullet.
+- After a section's bullets, add a brief analysis line starting with ↳ only if there is something genuinely insightful to say about the section as a whole — skip it otherwise.
+- Order sections by relevance — company announcements first
+- No "Actionable" section
+- Max 2500 characters total"""
+        }]
+    )
+    return response.content[0].text.strip()
