@@ -24,14 +24,14 @@ HEADERS = {
 # Static native RSS feeds
 NATIVE_FEEDS = [
     # CEX
-    {"url": "https://blog.kraken.com/feed",         "name": "Kraken",      "category": "cex", "description": "media"},
-    {"url": "https://blog.bitfinex.com/feed",       "name": "Bitfinex",    "category": "cex",           "description": "media"},
-    {"url": "https://blog.bitmex.com/feed/",        "name": "BitMEX",      "category": "cex",           "description": "media"},
+    {"url": "https://blog.kraken.com/feed",         "name": "Kraken",      "category": "cex",           "description": "company"},
+    {"url": "https://blog.bitfinex.com/feed",       "name": "Bitfinex",    "category": "cex",           "description": "company"},
+    {"url": "https://blog.bitmex.com/feed/",        "name": "BitMEX",      "category": "cex",           "description": "company"},
     # Institutional
     {"url": "https://www.fireblocks.com/blog/feed", "name": "Fireblocks",  "category": "institutional", "description": "company"},
     # Research
-    {"url": "https://a16zcrypto.substack.com/feed", "name": "a16z Crypto", "category": "research",      "description": "media"},
-    {"url": "https://multicoin.capital/rss.xml",    "name": "Multicoin",   "category": "research",      "description": "media"},
+    {"url": "https://a16zcrypto.substack.com/feed", "name": "a16z Crypto", "category": "research",      "description": "research"},
+    {"url": "https://multicoin.capital/rss.xml",    "name": "Multicoin",   "category": "research",      "description": "research"},
     # News
     {"url": "https://www.theblock.co/rss.xml",      "name": "The Block",   "category": "news",          "description": "media"},
     {"url": "https://blockworks.co/feed",           "name": "Blockworks",  "category": "news",          "description": "media"},
