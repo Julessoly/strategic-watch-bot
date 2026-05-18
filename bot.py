@@ -158,22 +158,45 @@ async def cmd_ask(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     question = " ".join(ctx.args) if ctx.args else ""
     if not question:
         return await update.message.reply_text("Usage: /ask <question>")
-    msg = await update.message.reply_text("Searching knowledge base...")
+    msg = await update.message.reply_text("Searching knowledge base and web...")
+
+    # Build context from DB
     entries = search_entries(question, limit=15)
-    if not entries:
-        return await msg.edit_text("Nothing found in the knowledge base.")
-    context = "\n\n---\n\n".join(
-        f"[{e['source_name']} / {(e.get('published_at') or '')[:10]}]\n{e['title']}\n\n{(e.get('content') or '')[:800]}"
-        for e in entries
-    )
+    db_context = ""
+    if entries:
+        db_context = "\n\n---\n\n".join(
+            f"[{e['source_name']} / {(e.get('published_at') or '')[:10]}]\n{e['title']}\n\n{(e.get('content') or '')[:800]}"
+            for e in entries
+        )
+
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     response = client.messages.create(
         model="claude-sonnet-4-20250514",
-        max_tokens=1000,
-        system="You are a strategic intelligence assistant for Blockchain.com. Answer only using the provided knowledge base. Be concise. Cite sources with [SourceName].",
-        messages=[{"role": "user", "content": f"Knowledge base:\n\n{context}\n\n---\n\nQuestion: {question}"}]
+        max_tokens=1500,
+        system=f"""You are a strategic intelligence assistant for Blockchain.com, a leading crypto company offering retail exchange, institutional OTC, custody, staking, and prime brokerage services.
+
+Answer the user's question by combining:
+1. The internal knowledge base (scraped articles from crypto companies and media)
+2. Your own web search capabilities for recent or missing information
+
+Always prioritize recency. Cite internal sources as [SourceName] and web sources as [Web].
+Be concise and actionable. Focus on what matters for Blockchain.com's strategy.
+
+{"Internal knowledge base:\\n\\n" + db_context if db_context else "No relevant articles found in internal knowledge base — rely on web search."}""",
+        messages=[{"role": "user", "content": question}],
+        tools=[{"type": "web_search_20250305", "name": "web_search"}]
     )
-    await msg.edit_text(response.content[0].text.strip(), parse_mode="Markdown", disable_web_page_preview=True)
+
+    # Extract text from response (may contain tool_use blocks)
+    answer = " ".join(
+        block.text for block in response.content
+        if hasattr(block, "text")
+    ).strip()
+
+    if not answer:
+        answer = "No answer could be generated."
+
+    await msg.edit_text(answer, parse_mode="Markdown", disable_web_page_preview=True)
 
 async def cmd_export(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not is_contributor(update): return await update.message.reply_text("Contributors only.")
