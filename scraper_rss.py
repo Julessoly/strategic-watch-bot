@@ -72,7 +72,7 @@ GOOGLE_NEWS_SOURCES = [
     {"site": "ripple.com",                 "name": "Ripple",          "category": "stablecoins", "description": "company"},
     {"site": "treasury.ripple.com",        "name": "Ripple Treasury", "category": "stablecoins", "description": "company"},
     # Research — domaine racine (peu d'articles)
-    {"site": "paradigm.xyz",               "name": "Paradigm",        "category": "research", "description": "company"},
+    {"site": "paradigm.xyz",               "name": "Paradigm",        "category": "research", "description": "research"},
 ]
 
 
@@ -86,6 +86,7 @@ def _build_google_news_feeds() -> list[dict]:
             "url": url,
             "name": s["name"],
             "category": s["category"],
+            "description": s.get("description", "company"),
             "google_news": True,
         })
     return feeds
