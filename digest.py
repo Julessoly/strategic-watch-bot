@@ -1,9 +1,8 @@
 """
 Daily digest generator.
 Pulls recent entries from the last 24h and asks Claude to synthesise
-a structured memo for Andreas.
+a strategic memo for Andreas.
 """
-
 import os
 import logging
 from anthropic import Anthropic
@@ -23,11 +22,11 @@ def generate_daily_digest(hours: int = 24) -> str:
     lines = []
     for e in entries:
         source = e.get("source_name", "?")
-        category = e.get("source_category", "?")
         title = e.get("title", "")
-        content = (e.get("content") or "")[:300]
+        content = (e.get("content") or "")[:400]
         pub = (e.get("published_at") or "")[:10]
-        lines.append(f"[{source} | {category} | {pub}]\n{title}\n{content}")
+        tags = e.get("tags", "")
+        lines.append(f"[{source} | {pub} | {tags}]\n{title}\n{content}")
 
     combined = "\n\n---\n\n".join(lines)
     label = f"last {hours}h"
@@ -35,36 +34,32 @@ def generate_daily_digest(hours: int = 24) -> str:
     client = Anthropic(api_key=ANTHROPIC_API_KEY)
     response = client.messages.create(
         model=MODEL,
-        max_tokens=1200,
-        system="""You are a strategic analyst for Blockchain.com.
-Write crisp, direct memos for the leadership team. No marketing language.
-Concrete facts, named companies, numbers when available. No fluff.""",
+        max_tokens=1500,
+        system="""You are a strategic analyst for Blockchain.com, a crypto company with retail exchange, institutional OTC, custody, staking, and prime brokerage products.
+
+Your job is to write a daily intelligence memo for the leadership team. Rules:
+- Direct, factual, no marketing language or hype
+- Named companies, concrete numbers, specific events
+- Do not invent or extrapolate facts not present in the source material
+- The memo should feel like a senior analyst wrote it, not a template filler""",
         messages=[{
             "role": "user",
-            "content": f"""Here are the strategic watch entries from the {label}:
+            "content": f"""Here are today's strategic watch entries ({label}):
 
 {combined}
 
 ---
 
-Write a digest structured EXACTLY like this - nothing else:
+Write a strategic intelligence memo. 
 
-📊 *Strategic Watch — {label}*
-
-*Key information*
-3 to 5 bullets. The most important factual developments. Named companies, numbers, concrete events. No opinions.
-
-*Innovation*
-2 to 3 bullets. New products, launches, technical moves, or business model shifts worth knowing about.
-
-*Actionable for Blockchain.com*
-2 to 3 bullets. Specific, concrete actions or strategic responses Blockchain.com should consider. Name the relevant Blockchain.com product or team when possible (Institutional Services, wallet, OTC desk, SnapMarkets, June AI).
-
-Rules:
-- Be direct. No hype. No "this is exciting" or "this represents a significant opportunity".
-- Do not invent facts not present in the entries.
-- Max 2500 characters total.
-- Use plain Markdown bullet points (•)."""
+Format guidelines:
+- Start with the emoji header: 📊 *Strategic Watch — {label}*
+- Choose 2 to 4 sections based on what the news actually warrants today. Don't force sections that aren't supported by the data.
+- Possible section titles (use only what's relevant): Key Developments, Regulatory, Stablecoins, Institutional Moves, Innovation, Market Structure, Actionable for Blockchain.com
+- Always end with an "Actionable for Blockchain.com" section with 2-3 specific, concrete recommendations tied to actual news from today. Name relevant Blockchain.com products or teams when possible (Institutional Services, OTC desk, wallet, SnapMarkets, June AI).
+- Use bullet points (•) for all items
+- Max 2500 characters total
+- No repetition across sections — if something fits in one section, don't mention it again elsewhere"""
         }]
     )
     return response.content[0].text.strip()
