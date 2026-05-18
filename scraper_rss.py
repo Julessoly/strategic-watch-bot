@@ -1,6 +1,7 @@
 """
 RSS scraper — native feeds + Google News RSS.
-Google News: 30-day window, URL path filter to remove noise, trafilatura for content.
+Native feeds: trafilatura for full content.
+Google News: RSS summary as content. No url_filter — noise filtering handled by AI enrichment step.
 """
 
 import logging
@@ -23,54 +24,55 @@ HEADERS = {
 # Static native RSS feeds
 NATIVE_FEEDS = [
     # CEX
-    {"url": "https://blog.kraken.com/feed",         "name": "Kraken",      "category": "cex"},
-    {"url": "https://blog.bitfinex.com/feed",       "name": "Bitfinex",    "category": "cex"},
-    {"url": "https://blog.bitmex.com/feed/",        "name": "BitMEX",      "category": "cex"},
+    {"url": "https://blog.kraken.com/feed",         "name": "Kraken",      "category": "cex", "description": "media"},
+    {"url": "https://blog.bitfinex.com/feed",       "name": "Bitfinex",    "category": "cex",           "description": "media"},
+    {"url": "https://blog.bitmex.com/feed/",        "name": "BitMEX",      "category": "cex",           "description": "media"},
     # Institutional
-    {"url": "https://www.fireblocks.com/blog/feed", "name": "Fireblocks",  "category": "institutional"},
+    {"url": "https://www.fireblocks.com/blog/feed", "name": "Fireblocks",  "category": "institutional", "description": "company"},
     # Research
-    {"url": "https://a16zcrypto.substack.com/feed", "name": "a16z Crypto", "category": "research"},
-    {"url": "https://multicoin.capital/rss.xml",    "name": "Multicoin",   "category": "research"},
+    {"url": "https://a16zcrypto.substack.com/feed", "name": "a16z Crypto", "category": "research",      "description": "media"},
+    {"url": "https://multicoin.capital/rss.xml",    "name": "Multicoin",   "category": "research",      "description": "media"},
     # News
-    {"url": "https://www.theblock.co/rss.xml",      "name": "The Block",   "category": "news"},
-    {"url": "https://blockworks.co/feed",           "name": "Blockworks",  "category": "news"},
+    {"url": "https://www.theblock.co/rss.xml",      "name": "The Block",   "category": "news",          "description": "media"},
+    {"url": "https://blockworks.co/feed",           "name": "Blockworks",  "category": "news",          "description": "media"},
 ]
 
-# Google News sources
-# url_filter: only keep articles whose URL contains this path (None = keep all)
+# Google News sources — sous-chemins validés manuellement pour limiter le bruit
+# Le filtrage fin (coin updates, tutorials, job listings, etc.) est géré par l'étape d'enrichissement IA
 GOOGLE_NEWS_SOURCES = [
-    # CEX
-    {"site": "coinbase.com/blog",          "name": "Coinbase",   "category": "cex", "url_filter": None},
-    {"site": "gemini.com/blog",            "name": "Gemini",     "category": "cex", "url_filter": None},
-    {"site": "binance.com/en/blog",        "name": "Binance",    "category": "cex", "url_filter": None},
-    {"site": "okx.com/learn",              "name": "OKX",        "category": "cex", "url_filter": None},
-    {"site": "crypto.com/en/company-news", "name": "Crypto.com", "category": "cex", "url_filter": None},
-    {"site": "bitstamp.net/blog",          "name": "Bitstamp",   "category": "cex", "url_filter": None},
-    {"site": "announcements.bybit.com",     "name": "Bybit",      "category": "cex", "url_filter": None},
-    {"site": "gate.com/blog",              "name": "Gate.io",    "category": "cex", "url_filter": None},
-    {"site": "nexo.com/blog",              "name": "Nexo",       "category": "cex", "url_filter": None},
-    {"site": "bitget.com/blog",            "name": "Bitget",     "category": "cex", "url_filter": None},
-    # Institutional
-    {"site": "bullish.com",    "name": "Bullish",    "category": "institutional", "url_filter": None},
-    {"site": "bitgo.com",      "name": "BitGo",      "category": "institutional", "url_filter": None},
-    {"site": "anchorage.com",  "name": "Anchorage",  "category": "institutional", "url_filter": None},
-    {"site": "talos.com",      "name": "Talos",      "category": "institutional", "url_filter": None},
-    {"site": "ambergroup.io",  "name": "Amber",      "category": "institutional", "url_filter": None},
-    # OTC
-    {"site": "gsr.io",         "name": "GSR",        "category": "otc",           "url_filter": None},
-    {"site": "falconx.io",     "name": "FalconX",    "category": "otc",           "url_filter": None},
-    {"site": "wintermute.com", "name": "Wintermute", "category": "otc",           "url_filter": None},
-    {"site": "drw.com",        "name": "DRW",        "category": "otc",           "url_filter": None},
-    {"site": "flowdesk.co",    "name": "Flowdesk",   "category": "otc",           "url_filter": None},
-    {"site": "galaxy.com",     "name": "Galaxy",     "category": "otc",           "url_filter": None},
-    {"site": "b2c2.com",       "name": "B2C2",       "category": "otc",           "url_filter": None},
-    # Stablecoins
-    {"site": "circle.com",     "name": "Circle",     "category": "stablecoins",   "url_filter": None},
-    {"site": "tether.io",      "name": "Tether",     "category": "stablecoins",   "url_filter": None},
-    {"site": "paxos.com",      "name": "Paxos",      "category": "stablecoins",   "url_filter": None},
-    {"site": "ripple.com",     "name": "Ripple",     "category": "stablecoins",   "url_filter": None},
-    # Research
-    {"site": "paradigm.xyz",   "name": "Paradigm",   "category": "research",      "url_filter": None},
+    # CEX — sous-chemins directs validés
+    {"site": "coinbase.com/blog",          "name": "Coinbase",        "category": "cex", "description": "company"},
+    {"site": "gemini.com/blog",            "name": "Gemini",          "category": "cex", "description": "company"},
+    {"site": "binance.com/en/blog",        "name": "Binance",         "category": "cex", "description": "company"},
+    {"site": "okx.com/learn",              "name": "OKX",             "category": "cex", "description": "company"},
+    {"site": "crypto.com/en/company-news", "name": "Crypto.com",      "category": "cex", "description": "company"},
+    {"site": "bitstamp.net/blog",          "name": "Bitstamp",        "category": "cex", "description": "company"},
+    {"site": "announcements.bybit.com",    "name": "Bybit",           "category": "cex", "description": "company"},
+    {"site": "gate.com/blog",              "name": "Gate.io",         "category": "cex", "description": "company"},
+    {"site": "nexo.com/blog",              "name": "Nexo",            "category": "cex", "description": "company"},
+    {"site": "bitget.com/blog",            "name": "Bitget",          "category": "cex", "description": "company"},
+    # Institutional — domaine racine (peu d'articles, peu de bruit)
+    {"site": "bullish.com",                "name": "Bullish",         "category": "institutional", "description": "company"},
+    {"site": "bitgo.com",                  "name": "BitGo",           "category": "institutional", "description": "company"},
+    {"site": "anchorage.com",              "name": "Anchorage",       "category": "institutional", "description": "company"},
+    {"site": "talos.com",                  "name": "Talos",           "category": "institutional", "description": "company"},
+    {"site": "ambergroup.io",              "name": "Amber",           "category": "institutional", "description": "company"},
+    # OTC — domaine racine
+    {"site": "gsr.io",                     "name": "GSR",             "category": "otc", "description": "company"},
+    {"site": "falconx.io",                 "name": "FalconX",         "category": "otc", "description": "company"},
+    {"site": "wintermute.com",             "name": "Wintermute",      "category": "otc", "description": "company"},
+    {"site": "drw.com",                    "name": "DRW",             "category": "otc", "description": "company"},
+    {"site": "flowdesk.co",                "name": "Flowdesk",        "category": "otc", "description": "company"},
+    {"site": "galaxy.com",                 "name": "Galaxy",          "category": "otc", "description": "company"},
+    {"site": "b2c2.com",                   "name": "B2C2",            "category": "otc", "description": "company"},
+    # Stablecoins — sous-chemins validés
+    {"site": "circle.com/blog",            "name": "Circle",          "category": "stablecoins", "description": "company"},
+    {"site": "tether.io/news",             "name": "Tether",          "category": "stablecoins", "description": "company"},
+    {"site": "paxos.com",                  "name": "Paxos",           "category": "stablecoins", "description": "company"},
+    {"site": "ripple.com",                 "name": "Ripple",          "category": "stablecoins", "description": "company"},
+    {"site": "treasury.ripple.com",        "name": "Ripple Treasury", "category": "stablecoins", "description": "company"},
+    # Research — domaine racine (peu d'articles)
+    {"site": "paradigm.xyz",               "name": "Paradigm",        "category": "research", "description": "company"},
 ]
 
 
@@ -85,7 +87,6 @@ def _build_google_news_feeds() -> list[dict]:
             "name": s["name"],
             "category": s["category"],
             "google_news": True,
-            "url_filter": s.get("url_filter"),
         })
     return feeds
 
@@ -117,6 +118,7 @@ def _strip_html(html: str) -> str:
 
 
 async def _fetch_article(session, url: str) -> Optional[str]:
+    """Fetch full article content via trafilatura. Only used for native RSS feeds."""
     try:
         async with session.get(url, headers=HEADERS, timeout=aiohttp.ClientTimeout(total=20)) as r:
             if r.status != 200:
@@ -131,7 +133,7 @@ async def _fetch_article(session, url: str) -> Optional[str]:
 
 async def scrape_feed(session, feed: dict, cutoff: datetime) -> tuple[int, int]:
     name = feed["name"]
-    url_filter = feed.get("url_filter")
+    is_google = feed.get("google_news", False)
     new = skipped = 0
 
     try:
@@ -162,22 +164,24 @@ async def scrape_feed(session, feed: dict, cutoff: datetime) -> tuple[int, int]:
         if not article_url:
             continue
 
-        # URL path filter — skip articles not matching the expected path
-        if url_filter and url_filter not in article_url:
-            continue
-
         title = entry.get("title", "").strip()
 
-        # Fetch full content via trafilatura for all feeds
-        content = await _fetch_article(session, article_url)
-        if not content:
+        if is_google:
+            # Google News: use RSS summary as content (no trafilatura — most sites are React/blocked)
             raw_summary = entry.get("summary", "") or ""
             content = _strip_html(raw_summary) if raw_summary else ""
+        else:
+            # Native feed: fetch full content via trafilatura
+            content = await _fetch_article(session, article_url)
+            if not content:
+                raw_summary = entry.get("summary", "") or ""
+                content = _strip_html(raw_summary) if raw_summary else ""
+
         content = content[:4000]
 
         row_id = insert_entry(
-            source_type="rss",
             source_category=feed["category"],
+            source_description=feed.get("description"),
             source_name=name,
             source_url=article_url,
             author=entry.get("author", name),
