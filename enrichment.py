@@ -87,12 +87,15 @@ Content: {content[:1000] if content else "No content available"}"""
                 return True, "untagged"
             data = await r.json()
             text = data["content"][0]["text"].strip()
+            # Strip markdown code fences if present
+            text = text.replace("```json", "").replace("```", "").strip()
+            logger.info(f"API response for entry {entry['id']}: {text[:200]}")
             parsed = json.loads(text)
             relevant = parsed.get("relevant", True)
             tags = parsed.get("tags", "").strip()
             return relevant, tags
     except json.JSONDecodeError as e:
-        logger.warning(f"JSON parse error for entry {entry['id']}: {e}")
+        logger.warning(f"JSON parse error for entry {entry['id']}: {e} — raw: {text[:200] if 'text' in dir() else 'N/A'}")
         return True, "untagged"
     except Exception as e:
         logger.error(f"Enrichment error for entry {entry['id']}: {e}")
