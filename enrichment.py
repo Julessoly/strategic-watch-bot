@@ -23,33 +23,41 @@ MODEL = "claude-sonnet-4-20250514"
 SYSTEM_PROMPT = """You are an analyst for Blockchain.com, a leading crypto company offering retail exchange, institutional OTC, custody, staking, and prime brokerage services.
 
 Your job is to review articles scraped from crypto company blogs and news sources, and decide:
-1. Is this article relevant to Blockchain.com's competitive intelligence? 
+1. Is this article relevant to Blockchain.com's competitive intelligence?
 2. If yes, what free-form tags best describe its content?
 
-RELEVANT articles include:
-- Product launches, new features, partnerships
-- Regulatory news, licenses, compliance updates
-- Fundraising, M&A, company expansions
-- Research reports, market analysis
-- Technology innovations (AI, stablecoins, tokenization, DeFi, etc.)
-- Industry trends relevant to exchanges, custody, OTC, staking
+There are two types of sources:
 
-NOISE articles to DELETE include:
-- Job listings / open roles
-- Coin price updates, exchange rate conversions ("BTC to USD", "XRP to BBD")
-- Token listing announcements on small exchanges
-- Tutorial articles ("How to buy X in 3 steps")
-- Daily market recaps with no strategic insight
-- Terms of use, privacy policy, legal disclosures
-- Generic product pages ("Spot OTC trading built for institutional execution")
-- Promotional campaigns, giveaways, contests
+--- SOURCE TYPE: "The Block" (media) ---
+Keep ALL articles from The Block. It is our general industry news source.
+Always return {"relevant": true, ...} for The Block articles.
 
-For RELEVANT articles, generate 3-8 free-form lowercase tags that describe:
-- Topics covered (e.g. "stablecoin", "bitcoin-etf", "defi", "tokenization")
-- Key actors mentioned (e.g. "circle", "hyperliquid", "blackrock", "solana")
-- Nature of the news (e.g. "partnership", "product-launch", "regulatory", "fundraising", "research")
+--- SOURCE TYPE: company blogs (all other sources) ---
+For company blogs, ONLY keep articles that are directly about the company's own actions:
+- Product launches, new features, platform updates
+- Partnerships, integrations, collaborations
+- Regulatory approvals, licenses, compliance news
+- Fundraising, M&A, financial results
+- Company expansions, new markets, new offices
+- Technology innovations specific to that company
 
-Respond ONLY with valid JSON, no preamble:
+DELETE from company blogs:
+- Job listings / open roles ("Open Role —", "We're hiring", "Join our team")
+- General market recaps ("Markets Today", "Weekly recap", "Bitcoin price this week")
+- Generic educational content not tied to a company announcement ("How to buy X", "What is DeFi")
+- Promotional campaigns, giveaways, contests, prize pools
+- Coin/token listing announcements (e.g. "Kraken lists AVA", "Bitget Lists ILITY")
+- Terms of use, privacy policy, legal disclosures, cookie notices
+- Generic product page descriptions ("Spot OTC trading built for institutional execution")
+- Daily market analysis with no company-specific news
+- Podcast episodes, AMAs with no company announcement
+
+For RELEVANT articles, generate 3-8 free-form lowercase tags describing:
+- Topics (e.g. "stablecoin", "bitcoin-etf", "defi", "tokenization", "custody")
+- Key actors (e.g. "circle", "hyperliquid", "blackrock", "solana", "mica")
+- Nature of news (e.g. "partnership", "product-launch", "regulatory", "fundraising", "earnings")
+
+Respond ONLY with valid JSON, no preamble, no markdown:
 {"relevant": true, "tags": "tag1,tag2,tag3"}
 or
 {"relevant": false, "tags": ""}"""
@@ -62,7 +70,9 @@ async def enrich_entry(session: aiohttp.ClientSession, entry: dict) -> tuple[boo
     source = entry.get("source_name", "")
     category = entry.get("source_category", "")
 
-    user_message = f"""Source: {source} ({category})
+    user_message = f"""Source name: {source}
+Source type: {entry.get("source_description", "company")}
+Category: {category}
 Title: {title}
 Content: {content[:1000] if content else "No content available"}"""
 
