@@ -5,6 +5,7 @@ For each unenriched entry (tags IS NULL):
 - If relevant → generate free-form tags describing the article
 """
 
+import os
 import asyncio
 import aiohttp
 import json
@@ -16,6 +17,7 @@ from database import get_unenriched_entries, update_tags, delete_entry
 logger = logging.getLogger(__name__)
 
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 MODEL = "claude-sonnet-4-20250514"
 
 SYSTEM_PROMPT = """You are an analyst for Blockchain.com, a leading crypto company offering retail exchange, institutional OTC, custody, staking, and prime brokerage services.
@@ -67,6 +69,11 @@ Content: {content[:1000] if content else "No content available"}"""
     try:
         async with session.post(
             ANTHROPIC_API_URL,
+            headers={
+                "x-api-key": ANTHROPIC_API_KEY,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
             json={
                 "model": MODEL,
                 "max_tokens": 200,
