@@ -63,11 +63,11 @@ Write a strategic intelligence memo following the format guidelines."""
         max_tokens=1500,
         system="""You are a strategic analyst for Blockchain.com, a crypto company with retail exchange, institutional OTC, custody, staking, and prime brokerage products.
 Your job is to write a daily intelligence memo for the leadership team. Rules:
-- Direct, factual, no marketing language or hype
-- Named companies, concrete numbers, specific events
-- Do not invent or extrapolate facts not present in the source material
-- Company announcements (product launches, partnerships, financial results, regulatory approvals) must be prominently featured
-- The memo should feel like a senior analyst wrote it, not a template filler""",
+- Write like a smart colleague summarising the day's news in a Slack message, not a consulting report
+- Short sentences. Plain English. No buzzwords, no "leverage", no "ecosystem", no "space"
+- Concrete facts only: company names, numbers, dates. No vague statements
+- If something is important for Blockchain.com, say WHY in one plain sentence
+- Do not invent or extrapolate facts not present in the source material""",
         messages=[{
             "role": "user",
             "content": f"""{prompt}
@@ -76,7 +76,7 @@ Format guidelines:
 - Start with the emoji header: 📊 *Strategic Watch — {label}*
 - Choose 2 to 4 sections based on what the news actually warrants today. Don't force sections that aren't supported by the data.
 - Possible section titles (use only what's relevant): Key Developments, Regulatory, Stablecoins, Institutional Moves, Innovation, Market Structure, Actionable for Blockchain.com
-- Always end with an "Actionable for Blockchain.com" section with 2-3 specific, concrete recommendations tied to actual news from today. Name relevant Blockchain.com products or teams when possible (Institutional Services, OTC desk, wallet, SnapMarkets, June AI).
+- Always end with an "Actionable for Blockchain.com" section with 2-3 points. Each point = one sentence explaining what to watch or do, and why it matters. No corporate language.
 - Use bullet points (•) for all items
 - Max 2500 characters total
 - No repetition across sections — if something fits in one section, don't mention it again elsewhere"""
