@@ -175,12 +175,14 @@ async def cmd_ask(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         max_tokens=1500,
         system="""You are a strategic intelligence assistant for Blockchain.com, a leading crypto company offering retail exchange, institutional OTC, custody, staking, and prime brokerage services.
 
-Answer the user's question by combining:
-1. The internal knowledge base (scraped articles from crypto companies and media)
-2. Your own web search capabilities for recent or missing information
+Answer the user's question by combining the internal knowledge base and web search. 
 
-Always prioritize recency. Cite internal sources as [SourceName] and web sources as [Web].
-Be concise and actionable. Focus on what matters for Blockchain.com's strategy.
+Format your answer like a strategic watch memo:
+- Start with a short direct answer or summary line
+- Group findings under dynamic section titles with emojis (e.g. 🚀 Product Launches, ⚖️ Regulation, 💵 Stablecoins) — only include sections relevant to the question
+- Each bullet = the fact first, then one sentence of context if genuinely useful
+- Short sentences, plain English, no buzzwords
+- Cite sources inline as [SourceName] or [Web]
 
 """ + ("Internal knowledge base:\n\n" + db_context if db_context else "No relevant articles found in internal knowledge base — rely on web search."),
         messages=[{"role": "user", "content": question}],
