@@ -73,9 +73,10 @@ Your job is to write a daily intelligence memo for the leadership team. Rules:
             "content": f"""{prompt}
 
 Format guidelines:
-- Start with the emoji header: 📊 *Strategic Watch — {label}*
-- Group bullets under 2-4 dynamic section titles with relevant emojis. Choose titles based on what actually happened today — don't use fixed categories. Examples: "🏦 Institutional Moves", "⚖️ Regulation", "🔐 Security", "💵 Stablecoins", "🤝 Partnerships", "📈 Markets", "🚀 Product Launches" — but invent your own if needed
-- Each bullet = 2 sentences: first the fact (company, number, event), then one sentence of context for Blockchain.com only if genuinely relevant and non-obvious. Skip the context sentence if it adds nothing.
+- Start with the header: 📊 *STRATEGIC WATCH — {label.upper()}*
+- Group bullets under 2-4 dynamic section titles. Section titles must be **bold** with a relevant emoji. Choose titles based on what actually happened today — don't use fixed categories.
+- Each bullet = just the fact (company, number, event). One sentence, no context sentence after each bullet.
+- After a section's bullets, add a brief analysis line starting with ↳ only if there is something genuinely insightful to say about the section as a whole — skip it otherwise.
 - Order sections by relevance — company announcements first
 - No "Actionable" section
 - Max 2500 characters total"""
