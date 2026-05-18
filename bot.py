@@ -15,7 +15,7 @@ from telegram import Update, BotCommand
 from telegram.ext import Application, CommandHandler, ContextTypes
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from database import init_db, get_stats, search_entries, get_recent_entries, get_all_entries, get_last_ingested_per_source
+from database import init_db, get_stats, search_entries, get_recent_entries, get_all_entries, get_last_ingested_per_source, reset_untagged
 from scraper_rss import scrape_rss_feeds, RSS_FEEDS
 from digest import generate_daily_digest
 from enrichment import enrich_entries
@@ -98,6 +98,11 @@ async def cmd_scrape_rss(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     msg = await update.message.reply_text(f"Scraping RSS ({len(RSS_FEEDS)} sources, last {days}d)...")
     r = await scrape_rss_feeds(days=days)
     await msg.edit_text(f"RSS done\nNew: +{r['new']}\nSkipped: {r['skipped']}\nErrors: {len(r['errors'])}")
+
+async def cmd_reset_tags(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not is_contributor(update): return await update.message.reply_text("Contributors only.")
+    n = reset_untagged()
+    await update.message.reply_text(f"Reset {n} entries to NULL — run /enrich to re-process.")
 
 async def cmd_enrich(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not is_contributor(update): return await update.message.reply_text("Contributors only.")
@@ -209,6 +214,7 @@ def main():
     app = Application.builder().token(TELEGRAM_TOKEN).post_init(post_init).build()
     app.add_handler(CommandHandler("start",      cmd_start))
     app.add_handler(CommandHandler("scrape_rss", cmd_scrape_rss))
+    app.add_handler(CommandHandler("reset_tags", cmd_reset_tags))
     app.add_handler(CommandHandler("enrich",     cmd_enrich))
     app.add_handler(CommandHandler("stats",      cmd_stats))
     app.add_handler(CommandHandler("digest",     cmd_digest))
