@@ -163,6 +163,17 @@ def insert_entry(
         conn.close()
 
 
+def reset_untagged() -> int:
+    """Reset entries with tags='untagged' back to NULL so they get re-processed."""
+    conn = get_conn()
+    try:
+        cursor = conn.execute("UPDATE entries SET tags = NULL WHERE tags = 'untagged'")
+        conn.commit()
+        return cursor.rowcount
+    finally:
+        conn.close()
+
+
 def update_tags(entry_id: int, tags: str) -> bool:
     """Set AI-enriched tags on a relevant entry."""
     conn = get_conn()
