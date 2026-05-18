@@ -2,6 +2,7 @@
 Daily digest generator.
 Pulls recent entries from the last 24h and asks Claude to synthesise
 a strategic memo for Andreas.
+Company blogs are prioritised over media sources.
 """
 import os
 import logging
@@ -15,42 +16,61 @@ MODEL = "claude-sonnet-4-20250514"
 
 
 def generate_daily_digest(hours: int = 24) -> str:
-    entries = get_recent_entries(hours=hours, limit=80)
+    entries = get_recent_entries(hours=hours, limit=150)
     if not entries:
         return f"No entries in the last {hours}h."
 
-    lines = []
-    for e in entries:
-        source = e.get("source_name", "?")
-        title = e.get("title", "")
-        content = (e.get("content") or "")[:400]
-        pub = (e.get("published_at") or "")[:10]
-        tags = e.get("tags", "")
-        lines.append(f"[{source} | {pub} | {tags}]\n{title}\n{content}")
+    # Split company blogs vs media
+    company_entries = [e for e in entries if e.get("source_description") in ("company", "research")]
+    media_entries   = [e for e in entries if e.get("source_description") == "media"]
 
-    combined = "\n\n---\n\n".join(lines)
+    def format_entry(e, content_limit=500):
+        source  = e.get("source_name", "?")
+        title   = e.get("title", "")
+        content = (e.get("content") or "")[:content_limit]
+        pub     = (e.get("published_at") or "")[:10]
+        tags    = e.get("tags", "")
+        return f"[{source} | {pub} | {tags}]\n{title}\n{content}"
+
+    # Company blogs: all articles, full content
+    company_block = "\n\n---\n\n".join(format_entry(e, 600) for e in company_entries)
+
+    # Media: cap at 15 articles to avoid drowning company news
+    media_block = "\n\n---\n\n".join(format_entry(e, 400) for e in media_entries[:15])
+
     label = f"last {hours}h"
+
+    prompt = f"""Here are today's strategic watch entries ({label}).
+
+=== COMPANY & RESEARCH BLOGS (PRIMARY SOURCE — prioritise these) ===
+These are direct announcements from crypto companies (competitors, partners, ecosystem players).
+They represent what companies are actually doing and should drive most of the memo.
+
+{company_block if company_block else "No company articles today."}
+
+=== INDUSTRY NEWS — The Block (SECONDARY SOURCE — complement only) ===
+Use these to add market context, regulatory news, or macro events not covered by company blogs.
+Do not let these dominate the memo.
+
+{media_block if media_block else "No media articles today."}
+
+---
+Write a strategic intelligence memo following the format guidelines."""
 
     client = Anthropic(api_key=ANTHROPIC_API_KEY)
     response = client.messages.create(
         model=MODEL,
         max_tokens=1500,
         system="""You are a strategic analyst for Blockchain.com, a crypto company with retail exchange, institutional OTC, custody, staking, and prime brokerage products.
-
 Your job is to write a daily intelligence memo for the leadership team. Rules:
 - Direct, factual, no marketing language or hype
 - Named companies, concrete numbers, specific events
 - Do not invent or extrapolate facts not present in the source material
+- Company announcements (product launches, partnerships, financial results, regulatory approvals) must be prominently featured
 - The memo should feel like a senior analyst wrote it, not a template filler""",
         messages=[{
             "role": "user",
-            "content": f"""Here are today's strategic watch entries ({label}):
-
-{combined}
-
----
-
-Write a strategic intelligence memo. 
+            "content": f"""{prompt}
 
 Format guidelines:
 - Start with the emoji header: 📊 *Strategic Watch — {label}*
