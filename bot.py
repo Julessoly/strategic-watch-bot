@@ -173,7 +173,7 @@ async def cmd_ask(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     response = client.messages.create(
         model="claude-sonnet-4-20250514",
         max_tokens=1500,
-        system=f"""You are a strategic intelligence assistant for Blockchain.com, a leading crypto company offering retail exchange, institutional OTC, custody, staking, and prime brokerage services.
+        system="""You are a strategic intelligence assistant for Blockchain.com, a leading crypto company offering retail exchange, institutional OTC, custody, staking, and prime brokerage services.
 
 Answer the user's question by combining:
 1. The internal knowledge base (scraped articles from crypto companies and media)
@@ -182,7 +182,7 @@ Answer the user's question by combining:
 Always prioritize recency. Cite internal sources as [SourceName] and web sources as [Web].
 Be concise and actionable. Focus on what matters for Blockchain.com's strategy.
 
-{"Internal knowledge base:\\n\\n" + db_context if db_context else "No relevant articles found in internal knowledge base — rely on web search."}""",
+""" + ("Internal knowledge base:\n\n" + db_context if db_context else "No relevant articles found in internal knowledge base — rely on web search."),
         messages=[{"role": "user", "content": question}],
         tools=[{"type": "web_search_20250305", "name": "web_search"}]
     )
