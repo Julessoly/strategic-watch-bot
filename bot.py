@@ -17,6 +17,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from database import init_db, get_stats, search_entries, get_recent_entries, get_all_entries, get_last_ingested_per_source, reset_untagged
 from scraper_rss import scrape_rss_feeds, RSS_FEEDS
+from scraper_twitter import scrape_twitter_accounts, TWITTER_ACCOUNTS
 from digest import generate_daily_digest
 from enrichment import enrich_entries
 
@@ -38,6 +39,10 @@ def is_contributor(u): return u.effective_user and u.effective_user.id in CONTRI
 async def job_rss():
     r = await scrape_rss_feeds(days=1)
     logger.info(f"RSS done - new={r['new']} skipped={r['skipped']}")
+
+async def job_twitter():
+    r = await scrape_twitter_accounts(days=1)
+    logger.info(f"Twitter done - new={r['new']} skipped={r['skipped']}")
 
 async def job_enrich():
     r = await enrich_entries(limit=200)
@@ -86,6 +91,18 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"*Strategic Watch Bot* — {role}\n\n/ask · /digest · /recent · /stats · /scrape\\_rss · /enrich",
         parse_mode="Markdown"
     )
+
+async def cmd_scrape_twitter(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not is_contributor(update): return await update.message.reply_text("Contributors only.")
+    days = 1
+    if ctx.args:
+        try:
+            days = max(1, min(int(ctx.args[0]), 30))
+        except ValueError:
+            pass
+    msg = await update.message.reply_text(f"Scraping Twitter ({len(TWITTER_ACCOUNTS)} accounts, last {days}d)...")
+    r = await scrape_twitter_accounts(days=days)
+    await msg.edit_text(f"Twitter done\nNew: +{r['new']}\nSkipped: {r['skipped']}\nErrors: {r['errors']}")
 
 async def cmd_scrape_rss(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not is_contributor(update): return await update.message.reply_text("Contributors only.")
@@ -238,7 +255,8 @@ def main():
     init_db()
     app = Application.builder().token(TELEGRAM_TOKEN).post_init(post_init).build()
     app.add_handler(CommandHandler("start",      cmd_start))
-    app.add_handler(CommandHandler("scrape_rss", cmd_scrape_rss))
+    app.add_handler(CommandHandler("scrape_twitter", cmd_scrape_twitter))
+    app.add_handler(CommandHandler("scrape_rss",     cmd_scrape_rss))
     app.add_handler(CommandHandler("reset_tags", cmd_reset_tags))
     app.add_handler(CommandHandler("enrich",     cmd_enrich))
     app.add_handler(CommandHandler("stats",      cmd_stats))
@@ -249,6 +267,7 @@ def main():
 
     scheduler = AsyncIOScheduler()
     scheduler.add_job(job_rss,          "cron", hour=8, minute=0)
+    scheduler.add_job(job_twitter,      "cron", hour=8, minute=5)
     scheduler.add_job(job_enrich,       "cron", hour=8, minute=15)
     scheduler.add_job(job_digest,       "cron", hour=8, minute=30, args=[app])
     scheduler.add_job(job_health_check, "cron", hour=9, minute=0,  args=[app])
