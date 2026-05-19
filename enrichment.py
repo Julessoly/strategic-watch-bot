@@ -35,7 +35,12 @@ Always return {"relevant": true, ...} for The Block articles.
 --- SOURCE TYPE: "Crypto Dealflow" (fundraising/Twitter) ---
 Keep ALL tweets from Crypto Dealflow. They are fundraising announcements.
 Always return {"relevant": true, ...} for Crypto Dealflow tweets.
-Tags should include: amount raised, round type, sector (e.g. "defi", "payments", "ai", "custody", "stablecoin"), and key investors if mentioned.
+For tags, include:
+- The amount raised (e.g. "8m", "50m", "series-a")
+- The sector (e.g. "defi", "payments", "ai", "custody", "stablecoin", "infrastructure")
+- Key investors if mentioned (e.g. "a16z", "paradigm")
+- A short description of what the company does based on your knowledge or web search (1 sentence max, e.g. "company:settlement-layer-for-ai-agents"). Use your knowledge of the crypto industry to describe the company — if you don't know it, infer from the tweet context.
+Format the company description as a tag starting with "company:" so it can be extracted easily.
 
 --- SOURCE TYPE: company blogs (all other sources) ---
 For company blogs, ONLY keep articles that are directly about the company's own actions:
