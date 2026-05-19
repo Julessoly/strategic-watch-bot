@@ -2,8 +2,9 @@
 Strategic Watch Bot
 Schedule UTC:
   08:00  RSS scrape (34 sources — native feeds + Google News)
+  08:05  Twitter scrape
   08:15  AI enrichment (tag + delete noise)
-  08:30  Digest -> ANDREAS_CHAT_ID
+  08:30  Digest -> GROUP_CHAT_ID
   09:00  Health check -> alert if source broken
 """
 
@@ -27,11 +28,23 @@ logger = logging.getLogger(__name__)
 TELEGRAM_TOKEN    = os.environ["TELEGRAM_BOT_TOKEN"]
 ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
 ANDREAS_CHAT_ID   = int(os.environ["ANDREAS_CHAT_ID"])
+GROUP_CHAT_ID     = int(os.environ.get("GROUP_CHAT_ID", "0")) or None
 CONTRIBUTOR_IDS   = set(map(int, os.environ["CONTRIBUTOR_IDS"].split(","))) if os.environ.get("CONTRIBUTOR_IDS") else set()
 ALL_ALLOWED       = CONTRIBUTOR_IDS | {ANDREAS_CHAT_ID}
 
-def is_allowed(u): return u.effective_user and u.effective_user.id in ALL_ALLOWED
-def is_contributor(u): return u.effective_user and u.effective_user.id in CONTRIBUTOR_IDS
+def is_allowed(u):
+    if not u.effective_user:
+        return False
+    # Allow individual authorized users
+    if u.effective_user.id in ALL_ALLOWED:
+        return True
+    # Allow any message coming from the group
+    if u.effective_chat and GROUP_CHAT_ID and u.effective_chat.id == GROUP_CHAT_ID:
+        return True
+    return False
+
+def is_contributor(u):
+    return u.effective_user and u.effective_user.id in CONTRIBUTOR_IDS
 
 
 # --- Scheduled jobs ---
@@ -50,7 +63,9 @@ async def job_enrich():
 
 async def job_digest(app):
     text = generate_daily_digest(hours=24)
-    await app.bot.send_message(chat_id=ANDREAS_CHAT_ID, text=text, parse_mode="Markdown", disable_web_page_preview=True)
+    # Send to group if configured, otherwise fallback to Andreas DM
+    target = GROUP_CHAT_ID if GROUP_CHAT_ID else ANDREAS_CHAT_ID
+    await app.bot.send_message(chat_id=target, text=text, parse_mode="Markdown", disable_web_page_preview=True)
 
 async def job_health_check(app):
     last_ingested = get_last_ingested_per_source()
