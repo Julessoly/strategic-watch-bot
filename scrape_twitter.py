@@ -1,6 +1,7 @@
 """
 Twitter scraper using GetXAPI.
-Fetches recent tweets from specified accounts and inserts them into the DB.
+Fetches recent tweets from specified accounts via advanced search.
+Docs: https://docs.getxapi.com
 """
 
 import os
@@ -14,8 +15,8 @@ from database import insert_entry
 
 logger = logging.getLogger(__name__)
 
-GETXAPI_KEY = os.environ.get("GETXAPI_KEY", "")
-GETXAPI_BASE = "https://api.getxapi.com/v2"
+GETXAPI_KEY  = os.environ.get("GETXAPI_KEY", "")
+GETXAPI_BASE = "https://api.getxapi.com"
 
 # Twitter accounts to follow
 TWITTER_ACCOUNTS = [
@@ -23,83 +24,63 @@ TWITTER_ACCOUNTS = [
 ]
 
 
-async def fetch_user_id(session: aiohttp.ClientSession, username: str) -> Optional[str]:
-    """Get Twitter user ID from username."""
+async def fetch_tweets(session: aiohttp.ClientSession, username: str, days: int = 1) -> list[dict]:
+    """Fetch recent tweets for a username via advanced search."""
+    from datetime import datetime, timezone, timedelta
+    since_date = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d")
     try:
         async with session.get(
-            f"{GETXAPI_BASE}/user/by/username/{username}",
-            headers={"x-api-key": GETXAPI_KEY},
-            timeout=aiohttp.ClientTimeout(total=15)
-        ) as r:
-            if r.status != 200:
-                logger.warning(f"[Twitter] Failed to get user ID for {username}: {r.status}")
-                return None
-            data = await r.json()
-            return data.get("data", {}).get("id")
-    except Exception as e:
-        logger.error(f"[Twitter] fetch_user_id error for {username}: {e}")
-        return None
-
-
-async def fetch_tweets(session: aiohttp.ClientSession, user_id: str, max_results: int = 20) -> list[dict]:
-    """Fetch recent tweets for a user."""
-    try:
-        async with session.get(
-            f"{GETXAPI_BASE}/user/{user_id}/tweets",
-            headers={"x-api-key": GETXAPI_KEY},
+            f"{GETXAPI_BASE}/twitter/tweet/advanced_search",
+            headers={"Authorization": f"Bearer {GETXAPI_KEY}"},
             params={
-                "max_results": max_results,
-                "tweet.fields": "created_at,text,author_id",
-                "exclude": "retweets,replies",
+                "q": f"from:{username} since:{since_date} -filter:retweets -filter:replies",
+                "product": "Latest",
             },
-            timeout=aiohttp.ClientTimeout(total=15)
+            timeout=aiohttp.ClientTimeout(total=20)
         ) as r:
             if r.status != 200:
-                logger.warning(f"[Twitter] Failed to fetch tweets for user {user_id}: {r.status}")
+                logger.warning(f"[Twitter] API error {r.status} for @{username}")
                 return []
             data = await r.json()
-            return data.get("data", [])
+            return data.get("tweets", [])
     except Exception as e:
-        logger.error(f"[Twitter] fetch_tweets error for user {user_id}: {e}")
+        logger.error(f"[Twitter] fetch_tweets error for @{username}: {e}")
         return []
 
 
 async def scrape_twitter_accounts(days: int = 1) -> dict:
     """Scrape tweets from all configured accounts."""
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     new_total = skip_total = errors = 0
 
     async with aiohttp.ClientSession() as session:
         for account in TWITTER_ACCOUNTS:
             username = account["username"]
             try:
-                user_id = await fetch_user_id(session, username)
-                if not user_id:
-                    errors += 1
-                    continue
-
-                tweets = await fetch_tweets(session, user_id, max_results=20)
+                tweets = await fetch_tweets(session, username, days=days)
                 if not tweets:
                     logger.info(f"[Twitter] @{username} — 0 tweets")
                     continue
 
                 new = skipped = 0
                 for tweet in tweets:
-                    created_at = tweet.get("created_at", "")
-                    if created_at:
-                        try:
-                            tweet_dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
-                            if tweet_dt < cutoff:
-                                continue
-                        except Exception:
-                            pass
-
-                    tweet_id = tweet.get("id", "")
-                    tweet_url = f"https://twitter.com/{username}/status/{tweet_id}"
-                    text = tweet.get("text", "").strip()
+                    tweet_id  = tweet.get("id", "")
+                    text      = tweet.get("text", "").strip()
+                    created_at = tweet.get("createdAt", "")
+                    tweet_url = tweet.get("twitterUrl") or tweet.get("url") or f"https://twitter.com/{username}/status/{tweet_id}"
 
                     if not text or not tweet_id:
                         continue
+
+                    # Parse date
+                    published_at = None
+                    if created_at:
+                        try:
+                            # Format: "Sun Jan 25 13:05:46 +0000 2026"
+                            dt = datetime.strptime(created_at, "%a %b %d %H:%M:%S +0000 %Y")
+                            dt = dt.replace(tzinfo=timezone.utc)
+                            published_at = dt.isoformat()
+                        except Exception:
+                            published_at = created_at
 
                     row_id = insert_entry(
                         source_category=account["category"],
@@ -109,7 +90,7 @@ async def scrape_twitter_accounts(days: int = 1) -> dict:
                         author=f"@{username}",
                         title=text[:140],
                         content=text,
-                        published_at=created_at or None,
+                        published_at=published_at,
                     )
                     if row_id:
                         new += 1
