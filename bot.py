@@ -17,7 +17,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from database import init_db, get_stats, search_entries, get_recent_entries, get_all_entries, get_last_ingested_per_source, reset_untagged
 from scraper_rss import scrape_rss_feeds, RSS_FEEDS
-from scraper_twitter import scrape_twitter_accounts, TWITTER_ACCOUNTS
+from scrape_twitter import scrape_twitter_accounts, TWITTER_ACCOUNTS
 from digest import generate_daily_digest
 from enrichment import enrich_entries
 
