@@ -71,6 +71,8 @@ GOOGLE_NEWS_SOURCES = [
     {"site": "paxos.com",                  "name": "Paxos",           "category": "stablecoins", "description": "company"},
     {"site": "ripple.com",                 "name": "Ripple",          "category": "stablecoins", "description": "company"},
     {"site": "treasury.ripple.com",        "name": "Ripple Treasury", "category": "stablecoins", "description": "company"},
+    # Prediction Markets
+    {"site": "predictionnews.com",         "name": "Prediction News",  "category": "prediction_markets", "description": "media"},
     # Research — domaine racine (peu d'articles)
     {"site": "paradigm.xyz",               "name": "Paradigm",        "category": "research", "description": "research"},
 ]
