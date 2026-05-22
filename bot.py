@@ -13,7 +13,7 @@ import logging
 import anthropic
 from datetime import datetime, timezone, timedelta
 from telegram import Update, BotCommand
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, ContextTypes, ConversationHandler, MessageHandler, filters
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from database import init_db, get_stats, search_entries, get_recent_entries, get_all_entries, get_last_ingested_per_source, reset_untagged
@@ -232,6 +232,66 @@ Format your answer exactly like a daily strategic watch memo:
 
     await msg.edit_text(answer, parse_mode="Markdown", disable_web_page_preview=True)
 
+from database import insert_entry
+
+# Conversation states for /add
+ADD_TITLE, ADD_SOURCE, ADD_CONTENT, ADD_TAGS = range(4)
+
+async def cmd_add(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not is_contributor(update): return await update.message.reply_text("Contributors only.")
+    await update.message.reply_text("📝 *Add a manual entry*\n\nStep 1/4 — What's the *title* of the article/report?", parse_mode="Markdown")
+    return ADD_TITLE
+
+async def add_title(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    ctx.user_data["add_title"] = update.message.text.strip()
+    await update.message.reply_text("Step 2/4 — What's the *source* name? (e.g. JPMorgan Research, Goldman Sachs)", parse_mode="Markdown")
+    return ADD_SOURCE
+
+async def add_source(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    ctx.user_data["add_source"] = update.message.text.strip()
+    await update.message.reply_text("Step 3/4 — Paste the *content* of the article (or a summary):", parse_mode="Markdown")
+    return ADD_CONTENT
+
+async def add_content(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    ctx.user_data["add_content"] = update.message.text.strip()
+    await update.message.reply_text("Step 4/4 — Add *tags* (comma-separated, e.g. `iran,oil,macro,inflation`) or send /skip to leave empty:", parse_mode="Markdown")
+    return ADD_TAGS
+
+async def add_tags(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    tags = update.message.text.strip() if update.message.text != "/skip" else ""
+    title   = ctx.user_data.get("add_title", "")
+    source  = ctx.user_data.get("add_source", "")
+    content = ctx.user_data.get("add_content", "")
+
+    row_id = insert_entry(
+        source_category="research",
+        source_description="research",
+        source_name=source,
+        source_url=f"manual:{title[:60].replace(' ', '-').lower()}-{int(datetime.now().timestamp())}",
+        author=source,
+        title=title,
+        content=content[:4000],
+        published_at=datetime.now(timezone.utc).isoformat(),
+    )
+    # Set tags directly if provided
+    if row_id and tags:
+        from database import update_tags
+        update_tags(row_id, tags)
+
+    if row_id:
+        await update.message.reply_text(f"✅ Entry added (id={row_id})\n\n*{title}*\nSource: {source}\nTags: {tags or '(none)'}", parse_mode="Markdown")
+    else:
+        await update.message.reply_text("⚠️ Failed to add entry — duplicate URL?")
+
+    ctx.user_data.clear()
+    return ConversationHandler.END
+
+async def add_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    ctx.user_data.clear()
+    await update.message.reply_text("Cancelled.")
+    return ConversationHandler.END
+
+
 async def cmd_export(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not is_contributor(update): return await update.message.reply_text("Contributors only.")
     import csv, io
@@ -261,6 +321,7 @@ async def post_init(app):
         BotCommand("ask",        "Ask a question"),
         BotCommand("recent",     "5 latest articles"),
         BotCommand("stats",      "DB stats"),
+        BotCommand("add",        "[Contributors] Add manual entry"),
         BotCommand("scrape_rss", "[Contributors] Scrape RSS"),
         BotCommand("enrich",     "[Contributors] AI enrichment"),
         BotCommand("export",     "[Contributors] Export CSV"),
@@ -269,6 +330,18 @@ async def post_init(app):
 def main():
     init_db()
     app = Application.builder().token(TELEGRAM_TOKEN).post_init(post_init).build()
+    add_conv = ConversationHandler(
+        entry_points=[CommandHandler("add", cmd_add)],
+        states={
+            ADD_TITLE:   [MessageHandler(filters.TEXT & ~filters.COMMAND, add_title)],
+            ADD_SOURCE:  [MessageHandler(filters.TEXT & ~filters.COMMAND, add_source)],
+            ADD_CONTENT: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_content)],
+            ADD_TAGS:    [MessageHandler(filters.TEXT & ~filters.COMMAND, add_tags),
+                          CommandHandler("skip", add_tags)],
+        },
+        fallbacks=[CommandHandler("cancel", add_cancel)],
+    )
+    app.add_handler(add_conv)
     app.add_handler(CommandHandler("start",      cmd_start))
     app.add_handler(CommandHandler("scrape_twitter", cmd_scrape_twitter))
     app.add_handler(CommandHandler("scrape_rss",     cmd_scrape_rss))
