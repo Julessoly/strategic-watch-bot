@@ -82,13 +82,13 @@ Your job is to write a daily intelligence memo for the leadership team. Rules:
             "content": f"""{prompt}
 
 Format guidelines:
-- Start with the header: 📊 *STRATEGIC WATCH — {label.upper()}*
-- Group bullets under 2-4 dynamic section titles with relevant emojis. Section titles must be **bold** with a relevant emoji, formatted exactly like this: **🏦 Institutional Moves**. Choose titles based on what actually happened today — don't use fixed categories.
+- Start with the header: *STRATEGIC WATCH — {label.upper()}*
+- Group bullets under 2-4 dynamic section titles with relevant emojis. Section titles must be **bold**, formatted exactly like this: **Institutional Moves**. Choose titles based on what actually happened today — don't use fixed categories.
 - Each bullet = just the fact (company, number, event). One sentence, no context sentence after each bullet.
 - After a section's bullets, add a brief analysis line starting with ↳ only if there is something genuinely insightful to say about the section as a whole — skip it otherwise.
 - Order sections by relevance — company announcements first
 - No "Actionable" section
-- Always end with a **💰 Fundraising** section. From the fundraising entries, select only the most relevant ones for Blockchain.com — focus on AI, payments, stablecoins, custody, exchanges, DeFi, institutional infrastructure. Skip generic or unrelated raises. For each bullet: bold company name, amount, round type, then a one-sentence description of what the company does — use your knowledge or the "company:" tag from the tags field. If you don't know the company, use the tweet context to infer what they do. Format: "• **CompanyName** ($Xm, Series A) — one sentence on what they do." If no relevant fundraising entries, skip this section.
+- Always end with a **Fundraising** section. From the fundraising entries, select only the most relevant ones for Blockchain.com — focus on AI, payments, stablecoins, custody, exchanges, DeFi, institutional infrastructure. Skip generic or unrelated raises. For each bullet: bold company name, amount, round type, then a one-sentence description of what the company does — use your knowledge or the "company:" tag from the tags field. If you don't know the company, use the tweet context to infer what they do. Format: "• **CompanyName** ($Xm, Series A) — one sentence on what they do." If no relevant fundraising entries, skip this section.
 - Max 3000 characters total"""
         }]
     )
