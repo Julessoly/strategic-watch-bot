@@ -9,17 +9,19 @@ Schedule UTC:
 """
 
 import os
+import re
 import logging
 import anthropic
 from datetime import datetime, timezone, timedelta
 from telegram import Update, BotCommand
 from telegram.ext import Application, CommandHandler, ContextTypes, ConversationHandler, MessageHandler, filters
+from telegram.error import BadRequest
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from database import init_db, get_stats, search_entries, get_recent_entries, get_all_entries, get_last_ingested_per_source, reset_untagged
 from scraper_rss import scrape_rss_feeds, RSS_FEEDS
 from scrape_twitter import scrape_twitter_accounts, TWITTER_ACCOUNTS
-from digest import generate_daily_digest
+from digest import generate_daily_digest, md_to_telegram_html
 from enrichment import enrich_entries
 
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
@@ -31,6 +33,12 @@ ANDREAS_CHAT_ID   = int(os.environ["ANDREAS_CHAT_ID"])
 GROUP_CHAT_ID     = int(os.environ.get("GROUP_CHAT_ID", "0")) or None
 CONTRIBUTOR_IDS   = set(map(int, os.environ["CONTRIBUTOR_IDS"].split(","))) if os.environ.get("CONTRIBUTOR_IDS") else set()
 ALL_ALLOWED       = CONTRIBUTOR_IDS | {ANDREAS_CHAT_ID}
+
+
+def strip_html_tags(text: str) -> str:
+    """Fallback: retire les tags HTML pour un envoi en texte brut si le parsing échoue."""
+    return re.sub(r"<[^>]+>", "", text)
+
 
 def is_allowed(u):
     if not u.effective_user:
@@ -65,7 +73,11 @@ async def job_digest(app):
     text = generate_daily_digest(hours=24)
     # Send to group if configured, otherwise fallback to Andreas DM
     target = GROUP_CHAT_ID if GROUP_CHAT_ID else ANDREAS_CHAT_ID
-    await app.bot.send_message(chat_id=target, text=text, parse_mode="Markdown", disable_web_page_preview=True)
+    try:
+        await app.bot.send_message(chat_id=target, text=text, parse_mode="HTML", disable_web_page_preview=True)
+    except BadRequest:
+        logger.warning("Digest HTML parse failed, sending as plain text", exc_info=True)
+        await app.bot.send_message(chat_id=target, text=strip_html_tags(text), disable_web_page_preview=True)
 
 async def job_health_check(app):
     last_ingested = get_last_ingested_per_source()
@@ -171,7 +183,11 @@ async def cmd_digest(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not is_allowed(update): return
     msg = await update.message.reply_text("Generating digest...")
     text = generate_daily_digest(hours=24)
-    await msg.edit_text(text, parse_mode="Markdown", disable_web_page_preview=True)
+    try:
+        await msg.edit_text(text, parse_mode="HTML", disable_web_page_preview=True)
+    except BadRequest:
+        logger.warning("Digest HTML parse failed, sending as plain text", exc_info=True)
+        await msg.edit_text(strip_html_tags(text), disable_web_page_preview=True)
 
 async def cmd_recent(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not is_allowed(update): return
@@ -230,7 +246,12 @@ Format your answer exactly like a daily strategic watch memo:
     if not answer:
         answer = "No answer could be generated."
 
-    await msg.edit_text(answer, parse_mode="Markdown", disable_web_page_preview=True)
+    answer = md_to_telegram_html(answer)
+    try:
+        await msg.edit_text(answer, parse_mode="HTML", disable_web_page_preview=True)
+    except BadRequest:
+        logger.warning("Ask HTML parse failed, sending as plain text", exc_info=True)
+        await msg.edit_text(strip_html_tags(answer), disable_web_page_preview=True)
 
 from database import insert_entry
 
@@ -312,6 +333,13 @@ async def cmd_export(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await msg.delete()
 
 
+# --- Error handler ---
+
+async def error_handler(update, context):
+    """Global handler: empêche les jobs/commandes de mourir en silence."""
+    logger.error("Unhandled exception in handler/job", exc_info=context.error)
+
+
 # --- App setup ---
 
 async def post_init(app):
@@ -352,6 +380,7 @@ def main():
     app.add_handler(CommandHandler("recent",     cmd_recent))
     app.add_handler(CommandHandler("ask",        cmd_ask))
     app.add_handler(CommandHandler("export",     cmd_export))
+    app.add_error_handler(error_handler)
 
     scheduler = AsyncIOScheduler()
     scheduler.add_job(job_rss,          "cron", hour=8, minute=0)
