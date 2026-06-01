@@ -5,6 +5,8 @@ a strategic memo for Andreas.
 Company blogs are prioritised over media sources.
 """
 import os
+import re
+import html as _html
 import logging
 from anthropic import Anthropic
 from database import get_recent_entries_by_published
@@ -13,6 +15,24 @@ logger = logging.getLogger(__name__)
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 MODEL = "claude-sonnet-4-20250514"
+
+
+def md_to_telegram_html(text: str) -> str:
+    """Convertit le markdown produit par le modèle en HTML Telegram sûr.
+
+    Ordre important :
+      1. on échappe & < > " ' EN PREMIER -> tout le contenu (y compris les
+         _ et < orphelins) devient inoffensif ;
+      2. on réinjecte ensuite les vrais tags <a>/<b>.
+    [^*\\n]+ empêche un ** ou * non apparié de déborder sur tout le message.
+    """
+    text = _html.escape(text)
+    # liens [texte](url) -> <a href="url">texte</a>
+    text = re.sub(r'\[([^\]]+)\]\((https?://[^)\s]+)\)', r'<a href="\2">\1</a>', text)
+    # gras **x** puis *x* -> <b>x</b>
+    text = re.sub(r'\*\*([^*\n]+)\*\*', r'<b>\1</b>', text)
+    text = re.sub(r'\*([^*\n]+)\*', r'<b>\1</b>', text)
+    return text
 
 
 def generate_daily_digest(hours: int = 24) -> str:
@@ -101,4 +121,6 @@ Format guidelines:
 - No strict length limit — prioritise readability and completeness over brevity, but stay concise within each bullet."""
         }]
     )
-    return response.content[0].text.strip()
+
+    raw = response.content[0].text.strip()
+    return md_to_telegram_html(raw)
