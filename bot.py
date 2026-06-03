@@ -71,13 +71,31 @@ async def job_enrich():
 
 async def job_digest(app):
     text = generate_daily_digest(hours=24)
-    # Send to group if configured, otherwise fallback to Andreas DM
     target = GROUP_CHAT_ID if GROUP_CHAT_ID else ANDREAS_CHAT_ID
+
+    # Helper function to split text safely at newlines
+    def chunk_text(raw_text, limit=4000):
+        chunks = []
+        while len(raw_text) > limit:
+            # Find the last newline before the limit
+            split_at = raw_text.rfind('\n', 0, limit)
+            if split_at == -1:
+                split_at = limit # Force split if no newlines exist
+            
+            chunks.append(raw_text[:split_at])
+            raw_text = raw_text[split_at:].strip()
+        
+        chunks.append(raw_text)
+        return chunks
+
     try:
-        await app.bot.send_message(chat_id=target, text=text, parse_mode="HTML", disable_web_page_preview=True)
+        for chunk in chunk_text(text):
+            await app.bot.send_message(chat_id=target, text=chunk, parse_mode="HTML", disable_web_page_preview=True)
     except BadRequest:
-        logger.warning("Digest HTML parse failed, sending as plain text", exc_info=True)
-        await app.bot.send_message(chat_id=target, text=strip_html_tags(text), disable_web_page_preview=True)
+        logger.warning("Digest HTML parse failed, sending as plain text in chunks", exc_info=True)
+        clean_text = strip_html_tags(text)
+        for chunk in chunk_text(clean_text):
+            await app.bot.send_message(chat_id=target, text=chunk, disable_web_page_preview=True)
 
 async def job_health_check(app):
     last_ingested = get_last_ingested_per_source()
