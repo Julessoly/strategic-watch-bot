@@ -68,8 +68,8 @@ def generate_daily_digest(hours: int = 24) -> str:
     stats = get_digest_stats()
 
     header_stats = (
-        f"📊 <b>Pipeline Stats:</b> {stats['read']} articles read\n"
-        f"🗑️ <b>Filtered:</b> {stats['noise'] + stats['duplicates']} discarded "
+        f"📊 *Pipeline Stats:* {stats['read']} articles read\n"
+        f"🗑 *Filtered:* {stats['noise'] + stats['duplicates']} discarded "
         f"({stats['duplicates']} duplicates, {stats['noise']} noise)"
     )
 
