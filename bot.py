@@ -22,7 +22,7 @@ from database import init_db, get_stats, search_entries, get_recent_entries, get
 from scraper_rss import scrape_rss_feeds, RSS_FEEDS
 from scrape_twitter import scrape_twitter_accounts, TWITTER_ACCOUNTS
 from digest import generate_daily_digest, md_to_telegram_html
-from enrichment import enrich_entries
+from enrichment import enrich_entries, deduplicate_cross_day
 
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -38,6 +38,49 @@ ALL_ALLOWED       = CONTRIBUTOR_IDS | {ANDREAS_CHAT_ID}
 def strip_html_tags(text: str) -> str:
     """Fallback: retire les tags HTML pour un envoi en texte brut si le parsing échoue."""
     return re.sub(r"<[^>]+>", "", text)
+
+def chunk_text(raw_text, limit=4000):
+    """Splits text cleanly at newlines to avoid hitting Telegram's limits."""
+    chunks = []
+    while len(raw_text) > limit:
+        split_at = raw_text.rfind('\n', 0, limit)
+        if split_at == -1:
+            split_at = limit
+        chunks.append(raw_text[:split_at])
+        raw_text = raw_text[split_at:].strip()
+    if raw_text:
+        chunks.append(raw_text)
+    return chunks
+
+async def send_chunked_digest(text, target_chat_id, bot, placeholder_msg=None):
+    """Handles safely sending a long digest, whether from a job or a user command."""
+    try:
+        chunks = chunk_text(text)
+        
+        # If there's a placeholder (manual command), edit it first
+        if placeholder_msg:
+            await placeholder_msg.edit_text(chunks[0], parse_mode="HTML", disable_web_page_preview=True)
+            start_index = 1
+        else:
+            start_index = 0
+            
+        # Send remaining chunks (or all chunks if automatic job)
+        for chunk in chunks[start_index:]:
+            await bot.send_message(chat_id=target_chat_id, text=chunk, parse_mode="HTML", disable_web_page_preview=True)
+            
+    except BadRequest:
+        logger.warning("Digest HTML parse failed, sending as plain text in chunks", exc_info=True)
+        clean_text = strip_html_tags(text)
+        chunks = chunk_text(clean_text)
+        
+        if placeholder_msg:
+            await placeholder_msg.edit_text(chunks[0], disable_web_page_preview=True)
+            start_index = 1
+        else:
+            start_index = 0
+            
+        for chunk in chunks[start_index:]:
+            await bot.send_message(chat_id=target_chat_id, text=chunk, disable_web_page_preview=True)
 
 
 def is_allowed(u):
@@ -69,33 +112,17 @@ async def job_enrich():
     r = await enrich_entries(limit=200)
     logger.info(f"Enrichment done - kept={r['kept']} deleted={r['deleted']} errors={r['errors']}")
 
+async def job_dedup():
+    """Cron wrapper for deduplication"""
+    logger.info("Starting scheduled cross-day deduplication...")
+    await deduplicate_cross_day()
+    logger.info("Scheduled cross-day deduplication complete.")
+
 async def job_digest(app):
     text = generate_daily_digest(hours=24)
     target = GROUP_CHAT_ID if GROUP_CHAT_ID else ANDREAS_CHAT_ID
-
-    # Helper function to split text safely at newlines
-    def chunk_text(raw_text, limit=4000):
-        chunks = []
-        while len(raw_text) > limit:
-            # Find the last newline before the limit
-            split_at = raw_text.rfind('\n', 0, limit)
-            if split_at == -1:
-                split_at = limit # Force split if no newlines exist
-            
-            chunks.append(raw_text[:split_at])
-            raw_text = raw_text[split_at:].strip()
-        
-        chunks.append(raw_text)
-        return chunks
-
-    try:
-        for chunk in chunk_text(text):
-            await app.bot.send_message(chat_id=target, text=chunk, parse_mode="HTML", disable_web_page_preview=True)
-    except BadRequest:
-        logger.warning("Digest HTML parse failed, sending as plain text in chunks", exc_info=True)
-        clean_text = strip_html_tags(text)
-        for chunk in chunk_text(clean_text):
-            await app.bot.send_message(chat_id=target, text=chunk, disable_web_page_preview=True)
+    
+    await send_chunked_digest(text, target, app.bot)
 
 async def job_health_check(app):
     last_ingested = get_last_ingested_per_source()
@@ -198,41 +225,29 @@ async def cmd_stats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     )
 
 async def cmd_digest(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    if not is_allowed(update): return
-    msg = await update.message.reply_text("Generating digest...")
-    text = generate_daily_digest(hours=24)
-
-    # Helper function to split text safely at newlines
-    def chunk_text(raw_text, limit=4000):
-        chunks = []
-        while len(raw_text) > limit:
-            split_at = raw_text.rfind('\n', 0, limit)
-            if split_at == -1:
-                split_at = limit
-            chunks.append(raw_text[:split_at])
-            raw_text = raw_text[split_at:].strip()
-        chunks.append(raw_text)
-        return chunks
-
+    if not is_allowed(update): 
+        return
+    
+    # 1. Send an updated status message
+    msg = await update.message.reply_text("🧼 Running cross-day deduplication and filtering...")
+    
     try:
-        chunks = chunk_text(text)
+        # 2. Run the deduplication script right now
+        await deduplicate_cross_day()
         
-        # 1. Edit the placeholder message with the first chunk
-        await msg.edit_text(chunks[0], parse_mode="HTML", disable_web_page_preview=True)
+        # 3. Update the message so the user knows it's moving to the next step
+        await msg.edit_text("🤖 Generating digest with Claude...")
         
-        # 2. Send any remaining chunks as new messages
-        for chunk in chunks[1:]:
-            await update.message.reply_text(chunk, parse_mode="HTML", disable_web_page_preview=True)
-            
-    except BadRequest:
-        logger.warning("Digest HTML parse failed, sending as plain text in chunks", exc_info=True)
-        clean_text = strip_html_tags(text)
-        chunks = chunk_text(clean_text)
+        # 4. Generate the final text
+        text = generate_daily_digest(hours=24)
+        target = update.effective_chat.id
         
-        # Fallback to plain text if HTML parsing throws an error across chunk boundaries
-        await msg.edit_text(chunks[0], disable_web_page_preview=True)
-        for chunk in chunks[1:]:
-            await update.message.reply_text(chunk, disable_web_page_preview=True)
+        # 5. Send using the chunked logic we built earlier
+        await send_chunked_digest(text, target, ctx.bot, placeholder_msg=msg)
+        
+    except Exception as e:
+        logger.error(f"Manual digest generation failed: {e}", exc_info=True)
+        await update.message.reply_text("❌ An error occurred while generating the manual digest.")
 
 
 async def cmd_recent(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -432,6 +447,7 @@ def main():
     scheduler.add_job(job_rss,          "cron", hour=8, minute=0)
     scheduler.add_job(job_twitter,      "cron", hour=8, minute=5)
     scheduler.add_job(job_enrich,       "cron", hour=8, minute=15)
+    scheduler.add_job(job_dedup,        "cron", hour=8, minute=24)
     scheduler.add_job(job_digest,       "cron", hour=8, minute=30, args=[app])
     scheduler.add_job(job_health_check, "cron", hour=9, minute=0,  args=[app])
     scheduler.start()

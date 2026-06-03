@@ -216,13 +216,14 @@ def get_unenriched_entries(limit: int = 100) -> list[dict]:
 
 
 def get_recent_entries_by_published(hours: int = 24, limit: int = 150) -> list[dict]:
-    """Return entries filtered by published_at (not ingested_at) for accurate daily digest."""
+    """Return active entries for the daily digest."""
     conn = get_conn()
     try:
         rows = conn.execute(
             """SELECT * FROM entries 
                WHERE published_at >= datetime('now', ?)
                AND tags IS NOT NULL
+               AND tags NOT IN ('noise', 'duplicate', 'untagged')
                ORDER BY published_at DESC LIMIT ?""",
             (f"-{hours} hours", limit)
         ).fetchall()
@@ -299,5 +300,21 @@ def get_last_ingested_per_source() -> dict:
             "SELECT source_name, MAX(ingested_at) FROM entries GROUP BY source_name"
         ).fetchall()
         return {row[0]: row[1] for row in rows}
+    finally:
+        conn.close()
+
+
+def get_digest_stats() -> dict:
+    """Calculate read, noise, and duplicate stats for the last 24h."""
+    conn = get_conn()
+    try:
+        # Total read in the last 24h based on ingestion
+        read = conn.execute("SELECT COUNT(*) FROM entries WHERE ingested_at >= datetime('now', '-24 hours')").fetchone()[0]
+        # Noise filtered today
+        noise = conn.execute("SELECT COUNT(*) FROM entries WHERE ingested_at >= datetime('now', '-24 hours') AND tags = 'noise'").fetchone()[0]
+        # Duplicates flagged today (compared to the last 48h)
+        duplicates = conn.execute("SELECT COUNT(*) FROM entries WHERE ingested_at >= datetime('now', '-24 hours') AND tags = 'duplicate'").fetchone()[0]
+        
+        return {"read": read, "noise": noise, "duplicates": duplicates}
     finally:
         conn.close()

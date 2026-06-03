@@ -9,7 +9,7 @@ import re
 import html as _html
 import logging
 from anthropic import Anthropic
-from database import get_recent_entries_by_published
+from database import get_recent_entries_by_published, get_digest_stats
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +65,14 @@ def generate_daily_digest(hours: int = 24) -> str:
 
     label = f"last {hours}h"
 
+    stats = get_digest_stats()
+
+    header_stats = (
+        f"📊 <b>Pipeline Stats:</b> {stats['read']} articles read\n"
+        f"🗑️ <b>Filtered:</b> {stats['noise'] + stats['duplicates']} discarded "
+        f"({stats['duplicates']} duplicates, {stats['noise']} noise)"
+    )
+
     prompt = f"""Here are today's strategic watch entries ({label}).
 
 === COMPANY & RESEARCH BLOGS (PRIMARY SOURCE — direct from the company) ===
@@ -109,7 +117,9 @@ Your job is to write a daily intelligence memo for the leadership team. Rules:
             "content": f"""{prompt}
 
 Format guidelines:
-- Start with the header: *STRATEGIC WATCH — {label.upper()}*
+- Start with the header exactly like this (do not change it):
+*STRATEGIC WATCH — {label.upper()}*
+{header_stats}
 - COVERAGE: Aim for near-exhaustive coverage. Mention every distinct event from the source material. Only skip clear noise: minor protocol version upgrades (e.g. "Bybit supports Network X v1.7.0"), illiquid token delistings, marketing/sponsorship events, internal change logs, and routine fee/UI updates. Everything else gets a bullet.
 - DEDUPLICATION: If two source entries describe the same event (typically one company blog + one The Block article), produce ONE bullet, not two. The company blog is the source of truth.
 - Group bullets under dynamic section titles (typically 4-7 sections depending on what happened). Section titles must be **bold** with no emojis, formatted exactly like this: **Institutional Moves**. Choose titles based on what actually happened today — don't use fixed categories. Do NOT use emojis anywhere in the memo (no emojis in headers, section titles, bullets, or analysis lines).
