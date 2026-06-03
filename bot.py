@@ -225,7 +225,10 @@ async def cmd_stats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     )
 
 async def cmd_digest(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    logger.info(f"User {update.effective_user.id} tried to run /digest in chat {update.effective_chat.id}")
+    
     if not is_allowed(update): 
+        logger.warning(f"BLOCKED: User {update.effective_user.id} is not in ALL_ALLOWED ({ALL_ALLOWED})")
         return
     
     # 1. Send an updated status message
