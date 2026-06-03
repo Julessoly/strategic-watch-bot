@@ -201,11 +201,39 @@ async def cmd_digest(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not is_allowed(update): return
     msg = await update.message.reply_text("Generating digest...")
     text = generate_daily_digest(hours=24)
+
+    # Helper function to split text safely at newlines
+    def chunk_text(raw_text, limit=4000):
+        chunks = []
+        while len(raw_text) > limit:
+            split_at = raw_text.rfind('\n', 0, limit)
+            if split_at == -1:
+                split_at = limit
+            chunks.append(raw_text[:split_at])
+            raw_text = raw_text[split_at:].strip()
+        chunks.append(raw_text)
+        return chunks
+
     try:
-        await msg.edit_text(text, parse_mode="HTML", disable_web_page_preview=True)
+        chunks = chunk_text(text)
+        
+        # 1. Edit the placeholder message with the first chunk
+        await msg.edit_text(chunks[0], parse_mode="HTML", disable_web_page_preview=True)
+        
+        # 2. Send any remaining chunks as new messages
+        for chunk in chunks[1:]:
+            await update.message.reply_text(chunk, parse_mode="HTML", disable_web_page_preview=True)
+            
     except BadRequest:
-        logger.warning("Digest HTML parse failed, sending as plain text", exc_info=True)
-        await msg.edit_text(strip_html_tags(text), disable_web_page_preview=True)
+        logger.warning("Digest HTML parse failed, sending as plain text in chunks", exc_info=True)
+        clean_text = strip_html_tags(text)
+        chunks = chunk_text(clean_text)
+        
+        # Fallback to plain text if HTML parsing throws an error across chunk boundaries
+        await msg.edit_text(chunks[0], disable_web_page_preview=True)
+        for chunk in chunks[1:]:
+            await update.message.reply_text(chunk, disable_web_page_preview=True)
+
 
 async def cmd_recent(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not is_allowed(update): return
