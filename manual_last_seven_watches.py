@@ -243,5 +243,32 @@ Industry Research
 
 Fundraising
 No significant fundraising announcements today.
+""",
+
+"""
+STRATEGIC WATCH — 2026-06-08
+📊 Pipeline Stats: 54 articles read
+🗑 Filtered: 35 discarded (1 duplicates, 34 noise)
+
+Exchange Competition Intensifies
+• Gate.io launched multiple products today: World Cup prediction markets hub, SpaceX pre-IPO trading (SPCX), expanded VIP rewards across multiple markets, unified USDT framework for TradFi assets, ETH staking services, AI agent trading automation, and enhanced Gate Card for global USDT spending.
+• Kraken launched SpaceX pre-IPO perpetual futures with up to 5x leverage and multi-collateral margin, available globally except US, EEA, Canada, Australia, and New Zealand.
+• Bybit introduced IPO Express for early access to global IPOs before public listing.
+↳ Major exchanges are aggressively expanding into pre-IPO equity products and AI-powered trading tools, directly competing with our institutional prime brokerage services.
+
+Market Recovery and Analysis
+• Bitcoin reclaimed $63,000 in what analysts called an "oversold relief rally" while South Korea's KOSPI index plunged 8%.
+• ZEC rebounded 42% after ZODL founder Josh Swihart detailed the two-step emergency upgrade that resolved the critical Orchard shielded pool vulnerability.
+• Michael Saylor hinted at fresh bitcoin purchases with an "add more dots" post while Strategy sits $11.7 billion underwater on its bitcoin position.
+
+Corporate Treasury and Institutional Moves
+• JPMorgan said Strategy may need to rebuild dollar reserves to restore confidence and sees less than 50% chance of Clarity Act passage this year.
+• Strategy revealed its first bitcoin sale since 2022 one day before voting closes on a STRC dividend amendment.
+
+Legal and Regulatory Developments
+• New York judge stayed a lawsuit seeking ownership of nearly 40,000 bitcoin wallets and set July hearing on proposed amicus brief arguing the state's lost-and-found statute cannot claim assets controlled by private keys.
+
+Fundraising
+No significant fundraising announcements today.
 """
 ]
