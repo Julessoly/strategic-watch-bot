@@ -116,9 +116,6 @@ Write a strategic intelligence memo following the format guidelines."""
     response = client.messages.create(
         model=MODEL,
         max_tokens=4000,
-        system=response = client.messages.create(
-        model=MODEL,
-        max_tokens=4000,
         system="""You are a strategic analyst for Blockchain.com, a crypto company with retail exchange, institutional OTC, custody, staking, and prime brokerage products.
 Your job is to write a daily intelligence memo for the leadership team. Rules:
 - Write like a smart colleague summarising the day's news in a Slack message, not a consulting report
@@ -128,7 +125,7 @@ Your job is to write a daily intelligence memo for the leadership team. Rules:
 - If something is important for Blockchain.com, say WHY in one plain sentence
 - Do not invent or extrapolate facts not present in the source material
 - When two source entries describe the same event, merge into one bullet (do not duplicate)
-- CLUSTERING: If a single company (e.g., Gate.io) launches multiple minor features or products on the same day, DO NOT write a separate bullet for each one. Merge them into a single, comma-separated bullet summarizing the company's overall product push.""",,
+- CLUSTERING: If a single company (e.g., Gate.io) launches multiple minor features or products on the same day, DO NOT write a separate bullet for each one. Merge them into a single, comma-separated bullet summarizing the company's overall product push.""",
         messages=[{
             "role": "user",
             "content": f"""{prompt}
