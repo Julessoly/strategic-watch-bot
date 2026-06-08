@@ -31,6 +31,13 @@ def init_db():
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = get_conn()
     conn.execute("""
+        CREATE TABLE IF NOT EXISTS daily_watches (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            content TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS entries (
             id                    INTEGER PRIMARY KEY AUTOINCREMENT,
             source_category       TEXT NOT NULL,
@@ -316,5 +323,35 @@ def get_digest_stats() -> dict:
         duplicates = conn.execute("SELECT COUNT(*) FROM entries WHERE ingested_at >= datetime('now', '-24 hours') AND tags = 'duplicate'").fetchone()[0]
         
         return {"read": read, "noise": noise, "duplicates": duplicates}
+    finally:
+        conn.close()
+
+def save_daily_watch(content: str):
+    """Save an automated daily watch to the database."""
+    conn = get_conn()
+    try:
+        conn.execute("INSERT INTO daily_watches (content) VALUES (?)", (content,))
+        conn.commit()
+    finally:
+        conn.close()
+
+def get_past_watches(days: int = 7) -> list[str]:
+    """Retrieve the text of the watches from the last X days."""
+    conn = get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT content FROM daily_watches WHERE created_at >= datetime('now', ?) ORDER BY created_at ASC",
+            (f"-{days} days",)
+        ).fetchall()
+        return [row[0] for row in rows]
+    finally:
+        conn.close()
+
+def cleanup_old_watches(days: int = 7):
+    """Delete watches older than X days to save space."""
+    conn = get_conn()
+    try:
+        conn.execute("DELETE FROM daily_watches WHERE created_at < datetime('now', ?)", (f"-{days} days",))
+        conn.commit()
     finally:
         conn.close()

@@ -18,7 +18,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes, Conversation
 from telegram.error import BadRequest
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from database import init_db, get_stats, search_entries, get_recent_entries, get_all_entries, get_last_ingested_per_source, reset_untagged
+from database import init_db, get_stats, search_entries, get_recent_entries, get_all_entries, get_last_ingested_per_source, reset_untagged, save_daily_watch, cleanup_old_watches
 from scraper_rss import scrape_rss_feeds, RSS_FEEDS
 from scrape_twitter import scrape_twitter_accounts, TWITTER_ACCOUNTS
 from digest import generate_daily_digest, md_to_telegram_html
@@ -120,8 +120,9 @@ async def job_dedup():
 
 async def job_digest(app):
     text = generate_daily_digest(hours=24)
+    save_daily_watch(text)
+    cleanup_old_watches(days=7)
     target = GROUP_CHAT_ID if GROUP_CHAT_ID else ANDREAS_CHAT_ID
-    
     await send_chunked_digest(text, target, app.bot)
 
 async def job_health_check(app):

@@ -159,14 +159,14 @@ async def enrich_entries(limit: int = 100) -> dict:
 
 
 async def deduplicate_cross_day() -> int:
-    """Compares today's active news against the past week's to flag straggler duplicates."""
+    """Compares today's active news against yesterday's to flag straggler duplicates."""
     from database import get_conn, update_tags
     
     conn = get_conn()
-    # Get Past week's approved news (24h to 7 days ago)
-    past_news = conn.execute("""
+    # Get Yesterday's approved news (24h to 48h ago)
+    yesterday = conn.execute("""
         SELECT id, source_name, title FROM entries 
-        WHERE ingested_at >= datetime('now', '-7 days') AND ingested_at < datetime('now', '-24 hours')
+        WHERE ingested_at >= datetime('now', '-48 hours') AND ingested_at < datetime('now', '-24 hours')
         AND tags IS NOT NULL AND tags NOT IN ('noise', 'duplicate', 'untagged')
     """).fetchall()
     
@@ -178,58 +178,43 @@ async def deduplicate_cross_day() -> int:
     """).fetchall()
     conn.close()
 
-    if not past_news or not today:
-        logger.info("[Dedup] Skipping: past_news or today's news is empty.")
+    if not yesterday or not today:
         return 0
 
-    past_text = "\n".join([f"ID: {r[0]} | Source: {r[1]} | Title: {r[2]}" for r in past_news])
+    yesterday_text = "\n".join([f"ID: {r[0]} | Source: {r[1]} | Title: {r[2]}" for r in yesterday])
     today_text = "\n".join([f"ID: {r[0]} | Source: {r[1]} | Title: {r[2]}" for r in today])
 
     prompt = f"""
-You are a data cleaner. 
-Here is the news from the PAST WEEK (already reported):
-{past_text}
+                You are a data cleaner. 
+                Here is YESTERDAY'S news (already reported):
+                {yesterday_text}
 
-Here is TODAY'S news:
-{today_text}
+                Here is TODAY'S news:
+                {today_text}
 
-Task: Identify any articles in TODAY's news that are reporting the exact same event as an article from the PAST WEEK. (e.g. a media site reporting on a company blog from 3 days ago).
-Return ONLY a valid JSON list of IDs from TODAY's news that are duplicates. If none, return [].
-Example: [142, 145]
-"""
+                Task: Identify any articles in TODAY's news that are reporting the exact same event as an article from YESTERDAY. (e.g. a media site reporting on a company blog from yesterday).
+                Return ONLY a valid JSON list of IDs from TODAY's news that are duplicates. If none, return [].
+                Example: [142, 145]
+            """
 
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 ANTHROPIC_API_URL,
                 headers={"x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json"},
-                json={
-                    "model": MODEL, 
-                    "max_tokens": 1000,  # Increased to prevent truncation
-                    "system": "Output only a raw valid JSON list of integers. Do not include markdown code fences, headers, or conversational text.", 
-                    "messages": [{"role": "user", "content": prompt}]
-                },
+                json={"model": MODEL, "max_tokens": 100, "system": "Output only valid JSON.", "messages": [{"role": "user", "content": prompt}]},
             ) as r:
                 data = await r.json()
                 text = data["content"][0]["text"].strip()
                 
-                # Clean up potential markdown code fences that break json.loads
-                text = text.replace("```json", "").replace("```", "").strip()
-                
                 # Parse the JSON list of IDs
                 duplicate_ids = json.loads(text)
                 
-                if duplicate_ids:
-                    for dup_id in duplicate_ids:
-                        update_tags(dup_id, "duplicate")
-                        logger.info(f"Flagged cross-day duplicate ID: {dup_id}")
-                
+                for dup_id in duplicate_ids:
+                    update_tags(dup_id, "duplicate")
+                    logger.info(f"Flagged cross-day duplicate ID: {dup_id}")
+                    
                 return len(duplicate_ids)
-                
     except Exception as e:
         logger.error(f"Cross-day deduplication failed: {e}")
-        if 'text' in locals():
-            logger.error(f"Raw response from Claude that caused failure: {text}")
         return 0
-
-

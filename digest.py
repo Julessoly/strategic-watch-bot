@@ -9,7 +9,7 @@ import re
 import html as _html
 import logging
 from anthropic import Anthropic
-from database import get_recent_entries_by_published, get_digest_stats
+from database import get_recent_entries_by_published, get_digest_stats, get_past_watches
 from datetime import date
 logger = logging.getLogger(__name__)
 
@@ -63,6 +63,11 @@ def generate_daily_digest(hours: int = 24) -> str:
     # Fundraising: all tweets from Crypto Dealflow
     fundraising_block = "\n\n---\n\n".join(format_entry(e, 300) for e in fundraising_entries)
 
+    past_watches = get_past_watches(days=7)
+    past_watches_text = ""
+    if past_watches:
+        past_watches_text = "\n\n=== PAST 7 DAYS WATCHES ===\n" + "\n\n---\n\n".join(past_watches)
+
     label = f"{date.today()}"
 
     stats = get_digest_stats()
@@ -73,13 +78,21 @@ def generate_daily_digest(hours: int = 24) -> str:
         f"({stats['duplicates']} duplicates, {stats['noise']} noise)"
     )
 
-    prompt = f"""Here are today's strategic watch entries ({label}).
+    prompt = f""" Here are the past watches: 
+
+{past_watches_text}
+
+=== RULES FOR PAST WATCHES ===
+If you see an event in TODAY'S source material that was ALREADY REPORTED in the "PAST 7 DAYS WATCHES" section above, you MUST completely ignore it today. Do not write a bullet for it. Only report genuinely new developments.    
+    
+    
+Here are today's strategic watch entries ({label}).
 
 === COMPANY & RESEARCH BLOGS (PRIMARY SOURCE — direct from the company) ===
 These are direct announcements from crypto companies (competitors, partners, ecosystem players).
 When a company blog and a media article cover the same event, prefer the company source.
 
-{company_block if company_block else "No company articles today."} 
+{company_block if company_block else "No company articles today."}
 
 === INDUSTRY NEWS — The Block (RICH SOURCE — most events come from here) ===
 These cover the broader market: company actions, regulation, exploits, fundraises, macro.
