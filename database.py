@@ -110,6 +110,8 @@ def init_db():
     except Exception as e:
         logger.error(f"Migration error: {e}")
 
+    conn.execute("DROP TABLE IF EXISTS daily_watches")
+
     conn.execute("""
         CREATE TABLE IF NOT EXISTS daily_watches (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

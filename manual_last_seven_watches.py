@@ -243,29 +243,5 @@ Industry Research
 
 Fundraising
 No significant fundraising announcements today.
-""",
-
-"""
-STRATEGIC WATCH — 2026-06-08
-📊 Pipeline Stats: 54 articles read
-🗑 Filtered: 34 discarded (0 duplicates, 34 noise)
-
-Exchange Competition & Product Expansion
-• Gate.io launched multiple new products including a World Cup prediction market hub, Gate TradFi multi-asset platform with unified USDT framework, Gate.AI enterprise model management, and Gate Card for global USDT spending — aggressive expansion across prediction markets, traditional assets, AI, and payments directly competes with our retail exchange and institutional offerings.
-• Gate.io also launched Gate for AI Agent for trading automation, expanded their VIP rewards program to multi-market trading, and enhanced ETH staking services — automation features and enhanced staking compete with our product roadmap.
-• Both Kraken and Bybit launched SpaceX pre-IPO trading products, with Kraken offering SPCX perpetual futures up to 5x leverage and Bybit introducing IPO Express for early global IPO access via xStocks — tokenized equity trading represents new revenue streams we currently don't offer.
-↳ Gate.io's product blitz across multiple verticals shows how exchanges are diversifying beyond spot/derivatives trading into payments, AI, traditional assets, and prediction markets to capture more customer wallet share.
-
-Market Movements & Recovery
-• Bitcoin reclaimed $63,000 in what analysts called an "oversold relief rally" while South Korea's KOSPI index crashed 8% — Presto's Min Jung noted the KOSPI crash may have minimally impacted bitcoin's recovery.
-• ZEC rebounded 42% after ZODL founder Josh Swihart detailed a two-step emergency upgrade resolving a critical vulnerability in Zcash's Orchard shielded pool — shows how security issues can create significant price volatility in privacy coins.
-• Michael Saylor hinted at additional bitcoin purchases with an "add more dots" social media post while MicroStrategy sits $11.7 billion underwater on bitcoin holdings — comes after Strategy's first bitcoin sale since 2022 and ahead of STRC dividend amendment voting.
-
-Regulatory & Legal Developments
-• A New York judge stayed a lawsuit seeking ownership of nearly 40,000 bitcoin wallets and scheduled a July hearing on a proposed amicus brief arguing New York's lost-and-found statute cannot claim assets controlled by private keys — important precedent for custody and wallet ownership rights.
-• JPMorgan analysts said crypto's outlook depends on Strategy's dividend plan and the Clarity Act, which they now see having less than 50% chance of passage this year — regulatory uncertainty continues to weigh on institutional adoption.
-
-Fundraising
-No significant fundraising announcements today.
 """
 ]

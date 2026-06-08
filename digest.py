@@ -78,13 +78,11 @@ def generate_daily_digest(hours: int = 24) -> str:
         f"({stats['duplicates']} duplicates, {stats['noise']} noise)"
     )
 
-    prompt = f""" Here are the past watches: 
+    prompt = f"""
+Here are the past watches: 
 
+=== PAST WATCHES ===
 {past_watches_text}
-
-=== RULES FOR PAST WATCHES ===
-If you see an event in TODAY'S source material that was ALREADY REPORTED in the "PAST 7 DAYS WATCHES" section above, you MUST completely ignore it today. Do not write a bullet for it. Only report genuinely new developments.    
-    
     
 Here are today's strategic watch entries ({label}).
 
@@ -125,7 +123,8 @@ Your job is to write a daily intelligence memo for the leadership team. Rules:
 - If something is important for Blockchain.com, say WHY in one plain sentence
 - Do not invent or extrapolate facts not present in the source material
 - When two source entries describe the same event, merge into one bullet (do not duplicate)
-- CLUSTERING: If a single company (e.g., Gate.io) launches multiple minor features or products on the same day, DO NOT write a separate bullet for each one. Merge them into a single, comma-separated bullet summarizing the company's overall product push.""",
+- CLUSTERING: If a single company (e.g., Gate.io) launches multiple minor features or products on the same day, DO NOT write a separate bullet for each one. Merge them into a single, comma-separated bullet summarizing the company's overall product push.
+- DO NOT REPEAT anything, if you see an event in TODAY'S source material that was ALREADY REPORTED in the "PAST WATCHES" section, you MUST completely ignore it today. Do not write a bullet for it. Only report genuinely new developments.""",
         messages=[{
             "role": "user",
             "content": f"""{prompt}
