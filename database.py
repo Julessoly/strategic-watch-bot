@@ -13,7 +13,7 @@ import os
 import json
 import sqlite3
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -30,13 +30,6 @@ def get_conn() -> sqlite3.Connection:
 def init_db():
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = get_conn()
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS daily_watches (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            content TEXT NOT NULL,
-            created_at TEXT NOT NULL DEFAULT (datetime('now'))
-        )
-    """)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS entries (
             id                    INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -116,6 +109,40 @@ def init_db():
             logger.info("Migration: removed source_type and is_relevant columns")
     except Exception as e:
         logger.error(f"Migration error: {e}")
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS daily_watches (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            content TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+
+    try:
+        count = conn.execute("SELECT COUNT(*) FROM daily_watches").fetchone()[0]
+        if count == 0:
+            logger.info("daily_watches table is empty. Starting to seed the last 7 watches...")
+            try:
+                from manual_last_seven_watches import old_watches
+                
+                for i, text in enumerate(old_watches):
+                    # Backdate the entries so the bot knows how old they are.
+                    # e.g., if there are 3 watches, i=0 is 3 days ago, i=2 is 1 day ago
+                    days_ago = len(old_watches) - i
+                    past_date = (datetime.now(timezone.utc) - timedelta(days=days_ago)).strftime('%Y-%m-%d %H:%M:%S')
+                    
+                    conn.execute(
+                        "INSERT INTO daily_watches (content, created_at) VALUES (?, ?)", 
+                        (text, past_date)
+                    )
+                
+                logger.info(f"Successfully seeded {len(old_watches)} past watches into the database!")
+            except ImportError:
+                logger.warning("manual_last_seven_watches.py not found. Skipping database seed.")
+            except Exception as e:
+                logger.error(f"Error while seeding daily_watches: {e}")
+    except Exception as e:
+        logger.error(f"Error checking daily_watches table count: {e}")
 
     conn.commit()
     conn.close()
