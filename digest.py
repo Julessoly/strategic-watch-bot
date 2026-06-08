@@ -79,7 +79,7 @@ def generate_daily_digest(hours: int = 24) -> str:
 These are direct announcements from crypto companies (competitors, partners, ecosystem players).
 When a company blog and a media article cover the same event, prefer the company source.
 
-{company_block if company_block else "No company articles today."}
+{company_block if company_block else "No company articles today."} 
 
 === INDUSTRY NEWS — The Block (RICH SOURCE — most events come from here) ===
 These cover the broader market: company actions, regulation, exploits, fundraises, macro.
