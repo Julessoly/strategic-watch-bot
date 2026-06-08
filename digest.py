@@ -63,7 +63,7 @@ def generate_daily_digest(hours: int = 24) -> str:
     # Fundraising: all tweets from Crypto Dealflow
     fundraising_block = "\n\n---\n\n".join(format_entry(e, 300) for e in fundraising_entries)
 
-    label = f"{date().today()}"
+    label = f"{date.today()}"
 
     stats = get_digest_stats()
 
