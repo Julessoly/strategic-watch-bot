@@ -10,7 +10,7 @@ import html as _html
 import logging
 from anthropic import Anthropic
 from database import get_recent_entries_by_published, get_digest_stats
-
+from datetime import date
 logger = logging.getLogger(__name__)
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
@@ -63,7 +63,7 @@ def generate_daily_digest(hours: int = 24) -> str:
     # Fundraising: all tweets from Crypto Dealflow
     fundraising_block = "\n\n---\n\n".join(format_entry(e, 300) for e in fundraising_entries)
 
-    label = f"last {hours}h"
+    label = f"{date().today()}"
 
     stats = get_digest_stats()
 

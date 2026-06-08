@@ -164,9 +164,16 @@ async def deduplicate_cross_day() -> int:
     
     conn = get_conn()
     # Get Yesterday's approved news (24h to 48h ago)
-    yesterday = conn.execute("""
+    # yesterday = conn.execute("""
+    #     SELECT id, source_name, title FROM entries 
+    #     WHERE ingested_at >= datetime('now', '-48 hours') AND ingested_at < datetime('now', '-24 hours')
+    #     AND tags IS NOT NULL AND tags NOT IN ('noise', 'duplicate', 'untagged')
+    # """).fetchall()
+
+    # Get Past week's approved news (24h to 7 days ago)
+    past_news = conn.execute("""
         SELECT id, source_name, title FROM entries 
-        WHERE ingested_at >= datetime('now', '-48 hours') AND ingested_at < datetime('now', '-24 hours')
+        WHERE ingested_at >= datetime('now', '-7 days') AND ingested_at < datetime('now', '-24 hours')
         AND tags IS NOT NULL AND tags NOT IN ('noise', 'duplicate', 'untagged')
     """).fetchall()
     
@@ -178,16 +185,16 @@ async def deduplicate_cross_day() -> int:
     """).fetchall()
     conn.close()
 
-    if not yesterday or not today:
+    if not past_news or not today:
         return 0
 
-    yesterday_text = "\n".join([f"ID: {r[0]} | Source: {r[1]} | Title: {r[2]}" for r in yesterday])
+    past_text = "\n".join([f"ID: {r[0]} | Source: {r[1]} | Title: {r[2]}" for r in past_news])
     today_text = "\n".join([f"ID: {r[0]} | Source: {r[1]} | Title: {r[2]}" for r in today])
 
     prompt = f"""
                 You are a data cleaner. 
                 Here is YESTERDAY'S news (already reported):
-                {yesterday_text}
+                {past_text}
 
                 Here is TODAY'S news:
                 {today_text}
