@@ -67,6 +67,7 @@ def generate_daily_digest(hours: int = 24) -> str:
     past_watches_text = ""
     if past_watches:
         past_watches_text = "\n\n=== PAST 7 DAYS WATCHES ===\n" + "\n\n---\n\n".join(past_watches)
+    past_watches_count = len(past_watches) if past_watches else 0
 
     label = f"{date.today()}"
 
@@ -76,6 +77,7 @@ def generate_daily_digest(hours: int = 24) -> str:
         f"📊 *Pipeline Stats:* {stats['read']} articles read\n"
         f"🗑 *Filtered:* {stats['noise'] + stats['duplicates']} discarded "
         f"({stats['duplicates']} duplicates, {stats['noise']} noise)"
+        f"🧠 *Memory:* {past_watches_count} past watches loaded for deduplication"
     )
 
     prompt = f"""
