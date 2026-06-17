@@ -17,6 +17,7 @@ from telegram import Update, BotCommand
 from telegram.ext import Application, CommandHandler, ContextTypes, ConversationHandler, MessageHandler, filters
 from telegram.error import BadRequest
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from digest import MODEL
 
 from database import init_db, get_stats, search_entries, get_recent_entries, get_all_entries, get_last_ingested_per_source, reset_untagged, save_daily_watch, cleanup_old_watches
 from scraper_rss import scrape_rss_feeds, RSS_FEEDS
@@ -284,7 +285,7 @@ async def cmd_ask(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     response = client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model=MODEL,
         max_tokens=1500,
         system="""You are a strategic intelligence assistant for Blockchain.com, a leading crypto company offering retail exchange, institutional OTC, custody, staking, and prime brokerage services.
 
