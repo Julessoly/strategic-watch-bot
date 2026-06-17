@@ -18,18 +18,10 @@ MODEL = "claude-sonnet-4-6"
 
 
 def md_to_telegram_html(text: str) -> str:
-    """Convertit le markdown produit par le modèle en HTML Telegram sûr.
-
-    Ordre important :
-      1. on échappe & < > " ' EN PREMIER -> tout le contenu (y compris les
-         _ et < orphelins) devient inoffensif ;
-      2. on réinjecte ensuite les vrais tags <a>/<b>.
-    [^*\\n]+ empêche un ** ou * non apparié de déborder sur tout le message.
-    """
     text = _html.escape(text)
-    # liens [texte](url) -> <a href="url">texte</a>
+    # remove markdown horizontal rules (lines that are only --- / *** / ___)
+    text = re.sub(r'(?m)^[ \t]*([-*_])(?:[ \t]*\1){2,}[ \t]*$\n?', '', text)
     text = re.sub(r'\[([^\]]+)\]\((https?://[^)\s]+)\)', r'<a href="\2">\1</a>', text)
-    # gras **x** puis *x* -> <b>x</b>
     text = re.sub(r'\*\*([^*\n]+)\*\*', r'<b>\1</b>', text)
     text = re.sub(r'\*([^*\n]+)\*', r'<b>\1</b>', text)
     return text
