@@ -14,7 +14,7 @@ from datetime import date
 logger = logging.getLogger(__name__)
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-MODEL = "claude-sonnet-latest"
+MODEL = "claude-sonnet-4-6"
 
 
 def md_to_telegram_html(text: str) -> str:
