@@ -13,12 +13,12 @@ import logging
 from typing import Optional
 
 from database import get_unenriched_entries, update_tags, delete_entry
+from digest import MODEL
 
 logger = logging.getLogger(__name__)
 
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-MODEL = "claude-sonnet-4-20250514"
 
 SYSTEM_PROMPT = """You are an analyst for Blockchain.com, a leading crypto company offering retail exchange, institutional OTC, custody, staking, and prime brokerage services.
 
