@@ -267,6 +267,7 @@ async def cmd_recent(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         lines.append(f"[{e['source_name']}] *{e['title'][:70]}*\n  {pub} — {e['source_url']}{tags}")
     await update.message.reply_text("\n\n".join(lines), parse_mode="Markdown", disable_web_page_preview=True)
 
+
 async def cmd_ask(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not is_allowed(update): return
     question = " ".join(ctx.args) if ctx.args else ""
@@ -313,11 +314,9 @@ Format your answer exactly like a daily strategic watch memo:
         answer = "No answer could be generated."
 
     answer = md_to_telegram_html(answer)
-    try:
-        await msg.edit_text(answer, parse_mode="HTML", disable_web_page_preview=True)
-    except BadRequest:
-        logger.warning("Ask HTML parse failed, sending as plain text", exc_info=True)
-        await msg.edit_text(strip_html_tags(answer), disable_web_page_preview=True)
+    target = update.effective_chat.id
+    await send_chunked_digest(answer, target, ctx.bot, placeholder_msg=msg)
+
 
 from database import insert_entry
 
