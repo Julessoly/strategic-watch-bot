@@ -273,35 +273,57 @@ async def cmd_ask(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     question = " ".join(ctx.args) if ctx.args else ""
     if not question:
         return await update.message.reply_text("Usage: /ask <question>")
-    msg = await update.message.reply_text("Searching knowledge base and web...")
+    msg = await update.message.reply_text("Searching internal knowledge base...")
 
-    # Build context from DB
-    entries = search_entries(question, limit=15)
+    # --- Build context from DB (PRIMARY source) ---
+    entries = search_entries(question, limit=20)
+    # Most recent first so the model can answer chronologically with dates
+    entries = sorted(
+        entries,
+        key=lambda e: (e.get("published_at") or e.get("ingested_at") or ""),
+        reverse=True,
+    )
+
     db_context = ""
     if entries:
         db_context = "\n\n---\n\n".join(
-            f"[{e['source_name']} / {(e.get('published_at') or '')[:10]}]\n{e['title']}\n\n{(e.get('content') or '')[:800]}"
-            for e in entries
+            f"#{i} · {e['source_name']} · {(e.get('published_at') or e.get('ingested_at') or 'date unknown')[:10]}\n"
+            f"Title: {e['title']}\n"
+            f"{(e.get('content') or '')[:1000]}"
+            for i, e in enumerate(entries, 1)
         )
+
+    system_prompt = """You are a strategic intelligence assistant for Blockchain.com, a leading crypto company offering retail exchange, institutional OTC, custody, staking, and prime brokerage services.
+
+HOW TO ANSWER — follow this order strictly:
+
+1. The INTERNAL KNOWLEDGE BASE below is your PRIMARY source. It is our curated strategic watch: dated, sourced articles. Build your answer FROM IT FIRST, not from general knowledge.
+2. For every fact taken from the base, ALWAYS state when it happened — include the date the base gives you. Cite it as [SourceName · YYYY-MM-DD].
+3. Use web search ONLY to complete the picture: add a very recent development the base is missing, fill an explicit gap, or confirm a figure. Do NOT lead with the web, and do NOT search at all if the internal base already answers the question.
+4. Keep the two sources visibly separate. Facts from our watch -> [SourceName · date]. Facts found online -> [Web]. The reader must always be able to tell what came from our base vs the open internet.
+5. If the internal base has nothing relevant, say so in one short line, then answer from the web.
+
+FORMAT — like a daily strategic watch memo:
+- Bold title line, e.g. **🔍 Circle — What our watch shows**
+- Group findings under dynamic section headers: **🚀 Product Launches**, **⚖️ Regulation**, **💵 Stablecoins** — only relevant ones
+- Each bullet (•): the fact first (company, number, event, DATE), then one short sentence of context only if useful
+- Short sentences, plain English, no buzzwords
+- Add a final **🌐 Web add-ons** section ONLY if you actually used web search, listing what the base did not cover
+
+"""
+
+    if db_context:
+        system_prompt += "INTERNAL KNOWLEDGE BASE (most recent first):\n\n" + db_context
+    else:
+        system_prompt += "INTERNAL KNOWLEDGE BASE: empty — no relevant article found for this question. Say so in one line, then answer from web search."
 
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     response = client.messages.create(
         model=MODEL,
         max_tokens=1500,
-        system="""You are a strategic intelligence assistant for Blockchain.com, a leading crypto company offering retail exchange, institutional OTC, custody, staking, and prime brokerage services.
-
-Answer the user's question by combining the internal knowledge base and web search.
-
-Format your answer exactly like a daily strategic watch memo:
-- Start with a bold title line relevant to the question, e.g. **🔍 Circle — Recent Announcements**
-- Group findings under dynamic section titles formatted exactly like this: **🚀 Product Launches**, **⚖️ Regulation**, **💵 Stablecoins** — only include sections relevant to the answer
-- Each bullet (•) = the fact first (company, number, event), then one sentence of context if genuinely useful
-- Short sentences, plain English, no buzzwords
-- Cite sources inline as [SourceName] or [Web]
-
-""" + ("Internal knowledge base:\n\n" + db_context if db_context else "No relevant articles found in internal knowledge base — rely on web search."),
+        system=system_prompt,
         messages=[{"role": "user", "content": question}],
-        tools=[{"type": "web_search_20250305", "name": "web_search"}]
+        tools=[{"type": "web_search_20250305", "name": "web_search"}],
     )
 
     # Extract text from response (may contain tool_use blocks)
