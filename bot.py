@@ -196,6 +196,11 @@ async def cmd_reset_tags(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     n = reset_untagged()
     await update.message.reply_text(f"Reset {n} entries to NULL — run /enrich to re-process.")
 
+async def cmd_purge_noise(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not is_contributor(update): return await update.message.reply_text("Contributors only.")
+    n = purge_noise()
+    await update.message.reply_text(f"🧹 Purged {n} noise rows from the DB.")
+
 async def cmd_enrich(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not is_contributor(update): return await update.message.reply_text("Contributors only.")
     limit = 200
@@ -349,13 +354,14 @@ SOURCES — use in this order:
 3. Provenance: tag base facts as [SourceName · YYYY-MM-DD] and web facts as [Web] ONLY when the answer mixes both sources. If the whole answer comes from one source, state that once in a single line under the title — do NOT tag every bullet.
 4. If the base has nothing relevant, say it in ONE short line, then answer from the web.
 
-OUTPUT RULES — read carefully:
-- NO preamble and NO narration of your process. Never write "I'll check the base", "let me search", etc. Start the message DIRECTLY with the bold title line.
-- Title: one bold line, e.g. **Off-exchange settlement — what we know**.
-- Group findings under short bold section headers; only the sections that actually apply.
-- Bullets are FACTUAL: start with "• " then the fact — who, what, the number, the date. At most ONE short context clause. No opinions, no editorialising, no "Context:" paragraphs, no "the point is…"/significance framing inside a bullet.
-- Put any analysis or implication for Blockchain.com on a SINGLE line starting with ↳ at the END of a section — never inside a bullet.
-- Short sentences, plain English, no buzzwords. Be concise: this is a Telegram message, keep it tight.
+ANSWER STYLE — answer the question directly, like a sharp colleague replying in chat. This is NOT a daily watch memo: do NOT use the watch's "section headers + ↳ analysis" structure, and do NOT write any ↳ lines.
+- NO preamble, NO narration of your process ("I'll check the base", "let me search"). Start straight with the answer.
+- First line: ONE short sentence that directly answers the question — the headline takeaway.
+- Then the concrete facts as short bullets ("• "), each one factual sentence with its source: [SourceName · YYYY-MM-DD] for base facts, [Web] for web facts. A second short clause only if it adds real information.
+- Cover each item ONCE. Never add a separate section that repeats an item you already mentioned. No bold section headers unless there are genuinely several distinct themes.
+- No analysis paragraphs, no editorialising, no "significance"/"the point is…" framing.
+- If the base is thin on a specific point, you MAY end with ONE short line offering to search the web for that detail.
+- Short sentences, plain English, no buzzwords. Keep it tight (Telegram message).
 
 """
 
@@ -508,6 +514,7 @@ async def post_init(app):
         BotCommand("add",        "[Contributors] Add manual entry"),
         BotCommand("scrape_rss", "[Contributors] Scrape RSS"),
         BotCommand("enrich",     "[Contributors] AI enrichment"),
+        BotCommand("purge_noise", "[Contributors] Delete noise rows"),
         BotCommand("export",     "[Contributors] Export CSV"),
     ])
 
@@ -538,6 +545,7 @@ def main():
     app.add_handler(CommandHandler("scrape_twitter", cmd_scrape_twitter))
     app.add_handler(CommandHandler("scrape_rss",     cmd_scrape_rss))
     app.add_handler(CommandHandler("reset_tags", cmd_reset_tags))
+    app.add_handler(CommandHandler("purge_noise", cmd_purge_noise))
     app.add_handler(CommandHandler("enrich",     cmd_enrich))
     app.add_handler(CommandHandler("stats",      cmd_stats))
     app.add_handler(CommandHandler("digest",     cmd_digest))
