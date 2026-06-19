@@ -29,6 +29,8 @@ def md_to_telegram_html(text: str) -> str:
     text = re.sub(r'\[([^\]]+)\]\((https?://[^)\s]+)\)', r'<a href="\2">\1</a>', text)
     text = re.sub(r'\*\*([^*\n]+)\*\*', r'<b>\1</b>', text)
     text = re.sub(r'\*([^*\n]+)\*', r'<b>\1</b>', text)
+    # collapse runs of 2+ spaces/tabs that follow a visible char (keeps line indentation)
+    text = re.sub(r'(?<=\S)[ \t]{2,}', ' ', text)
     return text
 
 
