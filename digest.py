@@ -24,6 +24,8 @@ def md_to_telegram_html(text: str) -> str:
     text = _html.escape(text)
     # remove markdown horizontal rules (lines that are only --- / *** / ___)
     text = re.sub(r'(?m)^[ \t]*([-*_])(?:[ \t]*\1){2,}[ \t]*$\n?', '', text)
+    # turn markdown list markers (- or *) at line start into • bullets (keeps indentation)
+    text = re.sub(r'(?m)^([ \t]*)[-*][ \t]+', r'\1• ', text)
     text = re.sub(r'\[([^\]]+)\]\((https?://[^)\s]+)\)', r'<a href="\2">\1</a>', text)
     text = re.sub(r'\*\*([^*\n]+)\*\*', r'<b>\1</b>', text)
     text = re.sub(r'\*([^*\n]+)\*', r'<b>\1</b>', text)
@@ -110,7 +112,7 @@ Your job is to write a daily intelligence memo for the leadership team. Rules:
 - Aim for comprehensive coverage: leadership wants to see EVERY meaningful event from the day, not a curated highlight reel. Err on the side of including rather than skipping.
 - Short sentences. Plain English. No buzzwords, no "leverage", no "ecosystem", no "space"
 - Concrete facts only: company names, numbers, dates. No vague statements
-- If something is important for Blockchain.com, say WHY in one plain sentence
+- Bullets state facts ONLY — never append analysis, significance, or a "why it matters" clause inside a bullet. Any interpretation (including why something matters for Blockchain.com) goes ONLY in the section's ↳ analysis line.
 - Do not invent or extrapolate facts not present in the source material
 - When two source entries describe the same event, merge into one bullet (do not duplicate)
 - CLUSTERING: If a single company (e.g., Gate.io) launches multiple minor features or products on the same day, DO NOT write a separate bullet for each one. Merge them into a single, comma-separated bullet summarizing the company's overall product push.
@@ -126,8 +128,8 @@ Format guidelines:
 - COVERAGE: Aim for near-exhaustive coverage. Mention every distinct event from the source material. Only skip clear noise: minor protocol version upgrades (e.g. "Bybit supports Network X v1.7.0"), illiquid token delistings, marketing/sponsorship events, internal change logs, and routine fee/UI updates. Everything else gets a bullet.
 - DEDUPLICATION: If two source entries describe the same event (typically one company blog + one The Block article), produce ONE bullet, not two. The company blog is the source of truth.
 - Group bullets under dynamic section titles (typically 4-7 sections depending on what happened). Section titles must be **bold** with no emojis, formatted exactly like this: **Institutional Moves**. Choose titles based on what actually happened today — don't use fixed categories. Do NOT use emojis anywhere in the memo (no emojis in headers, section titles, bullets, or analysis lines).
-- Each bullet = the fact in one sentence (company, number, event). No second context sentence after the bullet; if context is essential, weave it into the same sentence.
-- After a section's bullets, add a brief analysis line starting with ↳ only if there is something genuinely insightful to say about the section as a whole — skip it otherwise.
+- Each bullet = ONE purely factual sentence: who (company), what (action/event), the numbers, and the date. Nothing else. Do NOT append analysis, interpretation, significance, or framing such as "signals…", "positioning itself as…", "a direct continuation of…", "relevant to our strategy…", "raising its profile…". If you catch yourself explaining why a fact matters inside a bullet, cut that clause — it belongs in the ↳ line. An em dash is allowed only when it is part of the fact itself, never to bolt on a comment.
+- End each section with exactly one short analysis line starting with ↳. This is the ONLY place analysis, significance, or implications for Blockchain.com may appear. Keep it to a single sentence about the section as a whole — not a recap of the bullets.
 - Order sections by relevance — company announcements and major regulatory/market events first; routine product updates later.
 - No "Actionable" section.
 - Always end with a **Fundraising** section. From the fundraising entries, select only the most relevant ones for Blockchain.com — focus on AI, payments, stablecoins, custody, exchanges, DeFi, institutional infrastructure. Skip generic or unrelated raises. For each bullet: bold company name, amount, round type, then a one-sentence description of what the company does — use your knowledge or the "company:" tag from the tags field. If you don't know the company, use the tweet context to infer what they do. Format: "• **CompanyName** ($Xm, Series A) — one sentence on what they do." If no relevant fundraising entries, skip this section.
