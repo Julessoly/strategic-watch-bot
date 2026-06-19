@@ -324,7 +324,7 @@ async def _run_ask(update: Update, ctx: ContextTypes.DEFAULT_TYPE, question: str
     msg = await update.message.reply_text("🔎 Searching internal knowledge base…")
 
     # --- Build context from DB (PRIMARY source) ---
-    entries = search_entries(question, limit=20)
+    entries = search_entries(question)
     # Most recent first so the model can answer chronologically with dates
     entries = sorted(
         entries,
@@ -342,7 +342,7 @@ async def _run_ask(update: Update, ctx: ContextTypes.DEFAULT_TYPE, question: str
         )
 
     if entries:
-        await _safe_edit(msg, f"📚 Found {len(entries)} article(s) in our watch — asking Claude…")
+        await _safe_edit(msg, f"📚 Found {len(entries)} relevant article(s) in our watch — asking Claude…")
     else:
         await _safe_edit(msg, "🕳 Nothing in our watch — asking Claude…")
 
