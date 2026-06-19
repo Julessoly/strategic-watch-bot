@@ -334,20 +334,25 @@ def _tokenize(query: str) -> list[str]:
     return list(dict.fromkeys(w for w in words if len(w) >= 2 and w not in _STOPWORDS))
 
 
-def search_entries(query: str, limit: int = 20) -> list[dict]:
-    """Keyword search: each significant term is matched (OR) across title, content and tags.
-    Results are ranked by the number of distinct terms matched, then by recency."""
+def search_entries(query: str, limit: Optional[int] = None) -> list[dict]:
+    """Keyword search: each significant term is matched (OR) across title, content and tags,
+    ranked by number of distinct terms matched, then recency.
+    For multi-word questions, only rows matching at least 2 terms are kept (falling back to 1
+    if none qualify), so a single common word like 'exchange' can't flood the results.
+    limit=None (default) returns every matching row — no cap."""
     tokens = _tokenize(query)
     conn = get_conn()
     try:
         # No usable keyword (e.g. question was all stopwords) -> fall back to a single LIKE.
         if not tokens:
             like = f"%{query.strip()}%"
-            rows = conn.execute(
-                "SELECT * FROM entries WHERE title LIKE ? OR content LIKE ? OR tags LIKE ? "
-                "ORDER BY COALESCE(published_at, ingested_at) DESC LIMIT ?",
-                (like, like, like, limit)
-            ).fetchall()
+            sql = ("SELECT * FROM entries WHERE title LIKE ? OR content LIKE ? OR tags LIKE ? "
+                   "ORDER BY COALESCE(published_at, ingested_at) DESC")
+            params = [like, like, like]
+            if limit is not None:
+                sql += " LIMIT ?"
+                params.append(limit)
+            rows = conn.execute(sql, params).fetchall()
             return [dict(r) for r in rows]
 
         score_parts, where_parts = [], []
@@ -359,13 +364,27 @@ def search_entries(query: str, limit: int = 20) -> list[dict]:
             where_parts.append("(title LIKE ? OR content LIKE ? OR tags LIKE ?)")
             where_params += [like, like, like]
 
+        # Compute match_score in a subquery, then keep only rows above the threshold.
+        limit_sql = " LIMIT ?" if limit is not None else ""
         sql = (
+            f"SELECT * FROM ("
             f"SELECT *, ({' + '.join(score_parts)}) AS match_score FROM entries "
-            f"WHERE {' OR '.join(where_parts)} "
-            f"ORDER BY match_score DESC, COALESCE(published_at, ingested_at) DESC "
-            f"LIMIT ?"
+            f"WHERE {' OR '.join(where_parts)}"
+            f") WHERE match_score >= ? "
+            f"ORDER BY match_score DESC, COALESCE(published_at, ingested_at) DESC"
+            f"{limit_sql}"
         )
-        rows = conn.execute(sql, score_params + where_params + [limit]).fetchall()
+
+        def run(min_score):
+            params = score_params + where_params + [min_score]
+            if limit is not None:
+                params.append(limit)
+            return conn.execute(sql, params).fetchall()
+
+        threshold = 2 if len(tokens) >= 2 else 1
+        rows = run(threshold)
+        if not rows and threshold > 1:   # no strong match -> accept single-term matches
+            rows = run(1)
         return [dict(r) for r in rows]
     finally:
         conn.close()
