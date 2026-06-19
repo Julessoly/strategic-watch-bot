@@ -10,6 +10,7 @@ Schema:
 """
 
 import os
+import re
 import json
 import sqlite3
 import logging
@@ -304,14 +305,67 @@ def get_recent_entries(hours: int = 24, limit: int = 200, source_category: Optio
         conn.close()
 
 
+# Stopwords stripped before searching (EN + FR). Short crypto/geo tokens like
+# "ai", "us", "uk", "eu", "etf", "btc", "sec", "otc" are deliberately NOT here.
+_STOPWORDS = {
+    # English
+    "what", "when", "where", "which", "who", "whom", "whose", "why", "how",
+    "did", "does", "do", "is", "are", "was", "were", "be", "been", "being",
+    "has", "have", "had", "the", "an", "of", "in", "on", "at", "to", "for",
+    "from", "and", "or", "but", "about", "with", "as", "by", "that", "this",
+    "these", "those", "it", "its", "their", "there", "here", "recent",
+    "recently", "latest", "news", "update", "updates", "tell", "me", "my",
+    "our", "we", "you", "your", "any", "some", "all", "more", "most", "can",
+    "could", "would", "should", "will", "into", "over", "under", "than",
+    "then", "also", "just", "new",
+    # French
+    "quoi", "que", "qui", "quel", "quelle", "quels", "quelles", "comment",
+    "pourquoi", "quand", "où", "est", "sont", "été", "être", "fait", "faire",
+    "le", "la", "les", "un", "une", "des", "du", "de", "dans", "sur", "pour",
+    "avec", "et", "ou", "ce", "cette", "ces", "il", "elle", "ils", "elles",
+    "nous", "vous", "plus", "récent", "récente", "dernières", "dernier",
+    "actualité", "dis", "moi", "à",
+}
+
+
+def _tokenize(query: str) -> list[str]:
+    """Lowercase, split on non-word chars, drop stopwords and 1-char tokens, dedupe (order-preserving)."""
+    words = re.findall(r"\w+", query.lower())
+    return list(dict.fromkeys(w for w in words if len(w) >= 2 and w not in _STOPWORDS))
+
+
 def search_entries(query: str, limit: int = 20) -> list[dict]:
+    """Keyword search: each significant term is matched (OR) across title, content and tags.
+    Results are ranked by the number of distinct terms matched, then by recency."""
+    tokens = _tokenize(query)
     conn = get_conn()
     try:
-        like = f"%{query}%"
-        rows = conn.execute(
-            "SELECT * FROM entries WHERE title LIKE ? OR content LIKE ? ORDER BY ingested_at DESC LIMIT ?",
-            (like, like, limit)
-        ).fetchall()
+        # No usable keyword (e.g. question was all stopwords) -> fall back to a single LIKE.
+        if not tokens:
+            like = f"%{query.strip()}%"
+            rows = conn.execute(
+                "SELECT * FROM entries WHERE title LIKE ? OR content LIKE ? OR tags LIKE ? "
+                "ORDER BY COALESCE(published_at, ingested_at) DESC LIMIT ?",
+                (like, like, like, limit)
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+        score_parts, where_parts = [], []
+        score_params, where_params = [], []
+        for t in tokens:
+            like = f"%{t}%"
+            score_parts.append("(CASE WHEN title LIKE ? OR content LIKE ? OR tags LIKE ? THEN 1 ELSE 0 END)")
+            score_params += [like, like, like]
+            where_parts.append("(title LIKE ? OR content LIKE ? OR tags LIKE ?)")
+            where_params += [like, like, like]
+
+        sql = (
+            f"SELECT *, ({' + '.join(score_parts)}) AS match_score FROM entries "
+            f"WHERE {' OR '.join(where_parts)} "
+            f"ORDER BY match_score DESC, COALESCE(published_at, ingested_at) DESC "
+            f"LIMIT ?"
+        )
+        rows = conn.execute(sql, score_params + where_params + [limit]).fetchall()
         return [dict(r) for r in rows]
     finally:
         conn.close()
