@@ -17,9 +17,9 @@ from telegram import Update, BotCommand
 from telegram.ext import Application, CommandHandler, ContextTypes, ConversationHandler, MessageHandler, filters
 from telegram.error import BadRequest
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from digest import MODEL
+from digest import MODEL_DIGEST
 
-from database import init_db, get_stats, search_entries, get_recent_entries, get_all_entries, get_last_ingested_per_source, reset_untagged, save_daily_watch, cleanup_old_watches
+from database import init_db, get_stats, search_entries, get_recent_entries, get_all_entries, get_last_ingested_per_source, reset_untagged, save_daily_watch, cleanup_old_watches, purge_noise
 from scraper_rss import scrape_rss_feeds, RSS_FEEDS
 from scrape_twitter import scrape_twitter_accounts, TWITTER_ACCOUNTS
 from digest import generate_daily_digest, md_to_telegram_html
@@ -123,6 +123,7 @@ async def job_digest(app):
     text = generate_daily_digest(hours=24)
     save_daily_watch(text)
     cleanup_old_watches(days=7)
+    purge_noise()  # remove noise rows now that the digest stats are baked into `text`
     target = GROUP_CHAT_ID if GROUP_CHAT_ID else ANDREAS_CHAT_ID
     await send_chunked_digest(text, target, app.bot)
 
@@ -245,6 +246,7 @@ async def cmd_digest(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         
         # 4. Generate the final text
         text = generate_daily_digest(hours=24)
+        purge_noise()  # stats are already baked into `text`; safe to delete noise rows now
         target = update.effective_chat.id
         
         # 5. Send using the chunked logic we built earlier
@@ -319,7 +321,7 @@ FORMAT — like a daily strategic watch memo:
 
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     response = client.messages.create(
-        model=MODEL,
+        model=MODEL_DIGEST,
         max_tokens=1500,
         system=system_prompt,
         messages=[{"role": "user", "content": question}],
