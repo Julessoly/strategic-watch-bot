@@ -13,7 +13,7 @@ import re
 import logging
 import anthropic
 from datetime import datetime, timezone, timedelta
-from telegram import Update, BotCommand
+from telegram import Update, BotCommand, ForceReply
 from telegram.ext import Application, CommandHandler, ContextTypes, ConversationHandler, MessageHandler, filters
 from telegram.error import BadRequest
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -270,11 +270,42 @@ async def cmd_recent(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("\n\n".join(lines), parse_mode="Markdown", disable_web_page_preview=True)
 
 
+# /ask conversation state
+ASK_QUESTION = 100
+
+
 async def cmd_ask(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    if not is_allowed(update): return
+    """Entry point. If a question is supplied inline (/ask <q>), answer right away.
+    Otherwise prompt with a forced reply so the mobile keyboard opens to type."""
+    if not is_allowed(update): return ConversationHandler.END
     question = " ".join(ctx.args) if ctx.args else ""
+    if question:
+        await _run_ask(update, ctx, question)
+        return ConversationHandler.END
+    await update.message.reply_text(
+        "💬 What do you want to ask?",
+        reply_markup=ForceReply(selective=True, input_field_placeholder="Type your question…"),
+    )
+    return ASK_QUESTION
+
+
+async def ask_receive(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Receives the question the user typed after the prompt."""
+    if not is_allowed(update): return ConversationHandler.END
+    question = (update.message.text or "").strip()
     if not question:
-        return await update.message.reply_text("Usage: /ask <question>")
+        await update.message.reply_text("Empty question — cancelled.")
+        return ConversationHandler.END
+    await _run_ask(update, ctx, question)
+    return ConversationHandler.END
+
+
+async def ask_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Cancelled.")
+    return ConversationHandler.END
+
+
+async def _run_ask(update: Update, ctx: ContextTypes.DEFAULT_TYPE, question: str):
     msg = await update.message.reply_text("Searching internal knowledge base...")
 
     # --- Build context from DB (PRIMARY source) ---
@@ -458,7 +489,15 @@ def main():
         },
         fallbacks=[CommandHandler("cancel", add_cancel)],
     )
+    ask_conv = ConversationHandler(
+        entry_points=[CommandHandler("ask", cmd_ask)],
+        states={
+            ASK_QUESTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_receive)],
+        },
+        fallbacks=[CommandHandler("cancel", ask_cancel)],
+    )
     app.add_handler(add_conv)
+    app.add_handler(ask_conv)
     app.add_handler(CommandHandler("start",      cmd_start))
     app.add_handler(CommandHandler("scrape_twitter", cmd_scrape_twitter))
     app.add_handler(CommandHandler("scrape_rss",     cmd_scrape_rss))
@@ -467,7 +506,6 @@ def main():
     app.add_handler(CommandHandler("stats",      cmd_stats))
     app.add_handler(CommandHandler("digest",     cmd_digest))
     app.add_handler(CommandHandler("recent",     cmd_recent))
-    app.add_handler(CommandHandler("ask",        cmd_ask))
     app.add_handler(CommandHandler("export",     cmd_export))
     app.add_error_handler(error_handler)
 
