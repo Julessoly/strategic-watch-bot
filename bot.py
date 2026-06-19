@@ -305,8 +305,18 @@ async def ask_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
+async def _safe_edit(msg, text: str):
+    """Best-effort status update; ignores 'not modified' and flood errors."""
+    try:
+        await msg.edit_text(text)
+    except BadRequest:
+        pass
+    except Exception:
+        logger.debug("status edit skipped", exc_info=True)
+
+
 async def _run_ask(update: Update, ctx: ContextTypes.DEFAULT_TYPE, question: str):
-    msg = await update.message.reply_text("Searching internal knowledge base...")
+    msg = await update.message.reply_text("🔎 Searching internal knowledge base…")
 
     # --- Build context from DB (PRIMARY source) ---
     entries = search_entries(question, limit=20)
@@ -325,6 +335,11 @@ async def _run_ask(update: Update, ctx: ContextTypes.DEFAULT_TYPE, question: str
             f"{(e.get('content') or '')[:1000]}"
             for i, e in enumerate(entries, 1)
         )
+
+    if entries:
+        await _safe_edit(msg, f"📚 Found {len(entries)} article(s) in our watch — asking Claude…")
+    else:
+        await _safe_edit(msg, "🕳 Nothing in our watch — asking Claude…")
 
     system_prompt = """You are a strategic intelligence assistant for Blockchain.com, a leading crypto company offering retail exchange, institutional OTC, custody, staking, and prime brokerage services.
 
@@ -350,20 +365,42 @@ FORMAT — like a daily strategic watch memo:
     else:
         system_prompt += "INTERNAL KNOWLEDGE BASE: empty — no relevant article found for this question. Say so in one line, then answer from web search."
 
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    response = client.messages.create(
-        model=MODEL_DIGEST,
-        max_tokens=1500,
-        system=system_prompt,
-        messages=[{"role": "user", "content": question}],
-        tools=[{"type": "web_search_20250305", "name": "web_search"}],
-    )
+    # Stream the response so the status message can reflect what Claude is doing.
+    client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
+    web_count = 0
+    writing_announced = False
+    web_label = "Checking the web for more…" if entries else "Searching the web…"
 
-    # Extract text from response (may contain tool_use blocks)
-    answer = " ".join(
-        block.text for block in response.content
-        if hasattr(block, "text")
-    ).strip()
+    try:
+        async with client.messages.stream(
+            model=MODEL_DIGEST,
+            max_tokens=1500,
+            system=system_prompt,
+            messages=[{"role": "user", "content": question}],
+            tools=[{"type": "web_search_20250305", "name": "web_search"}],
+        ) as stream:
+            async for event in stream:
+                if event.type != "content_block_start":
+                    continue
+                block = event.content_block
+                btype = getattr(block, "type", "")
+                if btype == "server_tool_use" and getattr(block, "name", "") == "web_search":
+                    web_count += 1
+                    writing_announced = False
+                    suffix = f" ({web_count})" if web_count > 1 else ""
+                    await _safe_edit(msg, f"🌐 {web_label}{suffix}")
+                elif btype == "text" and not writing_announced:
+                    writing_announced = True
+                    await _safe_edit(msg, "✍️ Writing the answer…")
+            final = await stream.get_final_message()
+
+        # Extract text from the final message (may contain tool_use blocks)
+        answer = " ".join(
+            block.text for block in final.content if hasattr(block, "text")
+        ).strip()
+    except Exception as e:
+        logger.error(f"/ask streaming failed: {e}", exc_info=True)
+        answer = "❌ Something went wrong while answering."
 
     if not answer:
         answer = "No answer could be generated."
