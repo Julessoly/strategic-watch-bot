@@ -1,7 +1,8 @@
 """
 AI enrichment module.
 For each unenriched entry (tags IS NULL):
-- If noise (job listing, coin price, conversion page, market recap, etc.) → delete
+- If noise (job listing, coin price, conversion page, market recap, etc.) → tag 'noise'
+  (rows are purged from the DB after the daily digest is generated)
 - If relevant → generate free-form tags describing the article
 """
 
@@ -13,7 +14,7 @@ import logging
 from typing import Optional
 
 from database import get_unenriched_entries, update_tags, delete_entry
-from digest import MODEL
+from digest import MODEL_ENRICH
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +96,7 @@ Content: {content[:1000] if content else "No content available"}"""
                 "content-type": "application/json",
             },
             json={
-                "model": MODEL,
+                "model": MODEL_ENRICH,
                 "max_tokens": 200,
                 "system": SYSTEM_PROMPT,
                 "messages": [{"role": "user", "content": user_message}]
@@ -202,7 +203,7 @@ async def deduplicate_cross_day() -> int:
             async with session.post(
                 ANTHROPIC_API_URL,
                 headers={"x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json"},
-                json={"model": MODEL, "max_tokens": 100, "system": "Output only valid JSON.", "messages": [{"role": "user", "content": prompt}]},
+                json={"model": MODEL_ENRICH, "max_tokens": 100, "system": "Output only valid JSON.", "messages": [{"role": "user", "content": prompt}]},
             ) as r:
                 data = await r.json()
                 text = data["content"][0]["text"].strip()
