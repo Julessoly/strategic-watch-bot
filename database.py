@@ -6,7 +6,7 @@ Schema:
 - source_type removed
 - source_description: "media" or "company" to distinguish news outlets from company blogs
 - tags: AI-enriched comma-separated tags (e.g. "partnership,product_launch,regulatory")
-  NULL = not yet enriched / DELETE = noise (removed by enrichment step)
+  NULL = not yet enriched / 'noise' = junk (purged after the daily digest)
 """
 
 import os
@@ -232,6 +232,25 @@ def delete_entry(entry_id: int) -> bool:
     except Exception as e:
         logger.error(f"DB delete error [{entry_id}]: {e}")
         return False
+    finally:
+        conn.close()
+
+
+def purge_noise() -> int:
+    """Delete all entries flagged 'noise' by AI enrichment.
+    Called AFTER the daily digest is generated, so the digest's 'noise'
+    count stays accurate while the rows themselves are removed to keep the DB clean."""
+    conn = get_conn()
+    try:
+        cursor = conn.execute("DELETE FROM entries WHERE tags = 'noise'")
+        conn.commit()
+        n = cursor.rowcount
+        if n:
+            logger.info(f"Purged {n} noise entries from DB")
+        return n
+    except Exception as e:
+        logger.error(f"DB purge_noise error: {e}")
+        return 0
     finally:
         conn.close()
 
