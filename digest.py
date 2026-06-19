@@ -14,7 +14,10 @@ from datetime import date
 logger = logging.getLogger(__name__)
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-MODEL = "claude-sonnet-4-6"
+
+# Opus for synthesis-heavy tasks (digest, /ask); Haiku for cheap/fast tagging + dedup
+MODEL_DIGEST = "claude-opus-4-8"
+MODEL_ENRICH = "claude-haiku-4-5-20251001"
 
 
 def md_to_telegram_html(text: str) -> str:
@@ -59,18 +62,11 @@ def generate_daily_digest(hours: int = 24) -> str:
     past_watches_text = ""
     if past_watches:
         past_watches_text = "\n\n=== PAST 7 DAYS WATCHES ===\n" + "\n\n---\n\n".join(past_watches)
-    past_watches_count = len(past_watches) if past_watches else 0
-
     label = f"{date.today()}"
 
     stats = get_digest_stats()
 
-    header_stats = (
-        f"📊 *Pipeline Stats:* {stats['read']} articles read\n"
-        f"🗑 *Filtered:* {stats['noise'] + stats['duplicates']} discarded "
-        f"({stats['duplicates']} duplicates, {stats['noise']} noise)"
-        f"🧠 *Memory:* {past_watches_count} past watches loaded for deduplication"
-    )
+    header_stats = f"📊 {stats['read']} articles read"
 
     prompt = f"""
 Here are the past watches: 
@@ -106,7 +102,7 @@ Write a strategic intelligence memo following the format guidelines."""
 
     client = Anthropic(api_key=ANTHROPIC_API_KEY)
     response = client.messages.create(
-        model=MODEL,
+        model=MODEL_DIGEST,
         max_tokens=4000,
         system="""You are a strategic analyst for Blockchain.com, a crypto company with retail exchange, institutional OTC, custody, staking, and prime brokerage products.
 Your job is to write a daily intelligence memo for the leadership team. Rules:
