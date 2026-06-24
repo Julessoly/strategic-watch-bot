@@ -4,7 +4,7 @@ Schedule UTC:
   08:00  RSS scrape (34 sources — native feeds + Google News)
   08:05  Twitter scrape
   08:15  AI enrichment (tag + delete noise)
-  08:30  Digest -> GROUP_CHAT_ID
+  08:30  Digest -> GROUP_CHAT_ID + MARKETING_CHAT_ID
   09:00  Health check -> alert if source broken
 """
 
@@ -32,6 +32,7 @@ TELEGRAM_TOKEN    = os.environ["TELEGRAM_BOT_TOKEN"]
 ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
 ANDREAS_CHAT_ID   = int(os.environ["ANDREAS_CHAT_ID"])
 GROUP_CHAT_ID     = int(os.environ.get("GROUP_CHAT_ID", "0")) or None
+MARKETING_CHAT_ID = int(os.environ.get("MARKETING_CHAT_ID", "0")) or None
 CONTRIBUTOR_IDS   = set(map(int, os.environ["CONTRIBUTOR_IDS"].split(","))) if os.environ.get("CONTRIBUTOR_IDS") else set()
 ALL_ALLOWED       = CONTRIBUTOR_IDS | {ANDREAS_CHAT_ID}
 
@@ -124,8 +125,22 @@ async def job_digest(app):
     save_daily_watch(text)
     cleanup_old_watches(days=7)
     purge_noise()  # remove noise rows now that the digest stats are baked into `text`
-    target = GROUP_CHAT_ID if GROUP_CHAT_ID else ANDREAS_CHAT_ID
-    await send_chunked_digest(text, target, app.bot)
+
+    # Build list of target channels (fallback to Andreas DM if no group configured)
+    targets = []
+    if GROUP_CHAT_ID:
+        targets.append(GROUP_CHAT_ID)
+    if MARKETING_CHAT_ID:
+        targets.append(MARKETING_CHAT_ID)
+    if not targets:
+        targets.append(ANDREAS_CHAT_ID)
+
+    for chat_id in targets:
+        try:
+            await send_chunked_digest(text, chat_id, app.bot)
+            logger.info(f"Digest sent to {chat_id}")
+        except Exception as e:
+            logger.error(f"Failed to send digest to {chat_id}: {e}", exc_info=True)
 
 async def job_health_check(app):
     last_ingested = get_last_ingested_per_source()
